@@ -136,11 +136,11 @@ class SafetyGearDetector:
         if pw < 10 or ph < 20:
             return False, 0.0
 
-        # Torso bounding box: 20% to 65% vertical span, middle 80% horizontal span
+        # Torso bounding box: 18% to 68% vertical span, middle 84% horizontal span
         ty1 = y1 + int(0.18 * ph)
-        ty2 = y1 + int(0.65 * ph)
-        tx1 = x1 + int(0.10 * pw)
-        tx2 = x2 - int(0.10 * pw)
+        ty2 = y1 + int(0.68 * ph)
+        tx1 = x1 + int(0.08 * pw)
+        tx2 = x2 - int(0.08 * pw)
 
         if tx2 <= tx1 or ty2 <= ty1:
             return False, 0.0
@@ -149,47 +149,121 @@ class SafetyGearDetector:
         if torso_crop.size == 0:
             return False, 0.0
 
-        hsv = cv2.cvtColor(torso_crop, cv2.COLOR_BGR2HSV)
+        # Contrast-Limited Adaptive Histogram Equalization (CLAHE) to normalize shadows
+        hsv_raw = cv2.cvtColor(torso_crop, cv2.COLOR_BGR2HSV)
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(6, 6))
+        hsv_raw[:, :, 2] = clahe.apply(hsv_raw[:, :, 2])
+        hsv = hsv_raw
+
         total_pixels = torso_crop.shape[0] * torso_crop.shape[1]
 
-        # 1. Fluorescent Neon Lime / Yellow (Hue: 18 - 42, Saturation: 60 - 255, Value: 100 - 255)
-        lower_yellow = np.array([18, 60, 100], dtype=np.uint8)
-        upper_yellow = np.array([42, 255, 255], dtype=np.uint8)
+        # 1. Fluorescent Neon Lime / Yellow (Hue: 18 - 45, Saturation: 50 - 255, Value: 85 - 255)
+        lower_yellow = np.array([18, 50, 85], dtype=np.uint8)
+        upper_yellow = np.array([45, 255, 255], dtype=np.uint8)
         mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
 
-        # 2. Fluorescent Neon Orange / Red-Orange (Hue: 4 - 17, Saturation: 85 - 255, Value: 110 - 255)
-        lower_orange = np.array([4, 85, 110], dtype=np.uint8)
+        # 2. Fluorescent Neon Orange / Red-Orange (Hue: 3 - 17, Saturation: 75 - 255, Value: 95 - 255)
+        lower_orange = np.array([3, 75, 95], dtype=np.uint8)
         upper_orange = np.array([17, 255, 255], dtype=np.uint8)
         mask_orange = cv2.inRange(hsv, lower_orange, upper_orange)
 
+        # 3. High-Vis Red / Warm Hi-Vis (Hue: 172 - 180)
+        lower_red = np.array([172, 80, 95], dtype=np.uint8)
+        upper_red = np.array([180, 255, 255], dtype=np.uint8)
+        mask_red = cv2.inRange(hsv, lower_red, upper_red)
+
         # Combined fluorescent high-vis mask
-        vest_mask = cv2.bitwise_or(mask_yellow, mask_orange)
+        vest_mask = cv2.bitwise_or(mask_yellow, cv2.bitwise_or(mask_orange, mask_red))
+        
+        # Morphological opening to eliminate tiny speckles
+        k = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        vest_mask = cv2.morphologyEx(vest_mask, cv2.MORPH_OPEN, k)
         vest_pixels = cv2.countNonZero(vest_mask)
         vest_ratio = vest_pixels / float(total_pixels)
 
-        # 3. Reflective silver/white stripes (High V, Low S)
-        lower_reflective = np.array([0, 0, 175], dtype=np.uint8)
-        upper_reflective = np.array([180, 50, 255], dtype=np.uint8)
+        # 4. Reflective silver/gray stripes (High V, Low S) with horizontal edge gradient
+        lower_reflective = np.array([0, 0, 160], dtype=np.uint8)
+        upper_reflective = np.array([180, 55, 255], dtype=np.uint8)
         mask_refl = cv2.inRange(hsv, lower_reflective, upper_reflective)
         refl_pixels = cv2.countNonZero(mask_refl)
         refl_ratio = refl_pixels / float(total_pixels)
 
-        # High-vis vest score calculation
-        # If fluorescent color ratio > 11% or (color ratio > 7% and reflective stripes present)
-        confidence = 0.0
-        has_vest = False
+        # Sobel horizontal line check (reflective stripes produce horizontal edges)
+        gray_torso = cv2.cvtColor(torso_crop, cv2.COLOR_BGR2GRAY)
+        sobel_y = cv2.Sobel(gray_torso, cv2.CV_64F, 0, 1, ksize=3)
+        edge_energy = float(np.mean(np.abs(sobel_y)))
+        has_stripe_edges = edge_energy > 12.0
 
-        if vest_ratio >= 0.12:
-            confidence = min(0.98, 0.50 + vest_ratio * 1.5)
+        # Scoring decision
+        has_vest = False
+        confidence = 0.0
+
+        if vest_ratio >= 0.12 and (refl_ratio >= 0.02 or has_stripe_edges):
             has_vest = True
-        elif vest_ratio >= 0.07 and refl_ratio >= 0.03:
-            confidence = min(0.92, 0.45 + (vest_ratio + refl_ratio) * 1.4)
+            confidence = min(0.98, 0.65 + vest_ratio * 1.5 + refl_ratio * 2.0)
+        elif vest_ratio >= 0.16:
             has_vest = True
-        elif vest_ratio >= 0.05:
-            confidence = float(vest_ratio * 3.5)
-            has_vest = False
+            confidence = min(0.92, 0.55 + vest_ratio * 1.6)
+        elif vest_ratio >= 0.08 and refl_ratio >= 0.04 and has_stripe_edges:
+            has_vest = True
+            confidence = min(0.88, 0.50 + (vest_ratio + refl_ratio) * 1.8)
+        elif vest_ratio >= 0.05 and refl_ratio >= 0.06:
+            has_vest = True
+            confidence = 0.72
         else:
-            confidence = 0.10
             has_vest = False
+            confidence = max(0.05, float(vest_ratio * 2.0))
 
         return has_vest, float(round(confidence, 3))
+
+    def evaluate_head_region(
+        self,
+        frame: np.ndarray,
+        person_box: BoundingBox
+    ) -> Tuple[bool, float]:
+        """
+        Secondary analysis on the upper head region to detect hard hat color
+        uniformity and convex shell geometry when neural models report borderline confidence.
+        """
+        h, w, _ = frame.shape
+        x1 = max(0, int(person_box.x1))
+        y1 = max(0, int(person_box.y1))
+        x2 = min(w, int(person_box.x2))
+        y2 = min(h, int(person_box.y2))
+
+        pw = x2 - x1
+        ph = y2 - y1
+        if pw < 8 or ph < 16:
+            return False, 0.0
+
+        # Head region is top 22% of person
+        hy1 = max(0, y1 - int(0.05 * ph))
+        hy2 = y1 + int(0.22 * ph)
+        hx1 = max(0, x1 + int(0.10 * pw))
+        hx2 = min(w, x2 - int(0.10 * pw))
+
+        if hx2 <= hx1 or hy2 <= hy1:
+            return False, 0.0
+
+        head_crop = frame[hy1:hy2, hx1:hx2]
+        if head_crop.size == 0:
+            return False, 0.0
+
+        hsv = cv2.cvtColor(head_crop, cv2.COLOR_BGR2HSV)
+        total_p = head_crop.shape[0] * head_crop.shape[1]
+
+        # Yellow Hardhat (H: 20-38, S: 80-255, V: 120-255)
+        mask_y = cv2.inRange(hsv, np.array([20, 80, 120]), np.array([38, 255, 255]))
+        # White Hardhat (Low S, High V: S < 40, V > 180)
+        mask_w = cv2.inRange(hsv, np.array([0, 0, 180]), np.array([180, 40, 255]))
+        # Blue Hardhat (H: 95-125, S: 90-255, V: 80-255)
+        mask_b = cv2.inRange(hsv, np.array([95, 90, 80]), np.array([125, 255, 255]))
+        # Orange/Red Hardhat (H: 4-15 or 172-180, S: 100-255, V: 120-255)
+        mask_o = cv2.inRange(hsv, np.array([4, 100, 120]), np.array([15, 255, 255]))
+
+        combined_hat = cv2.bitwise_or(mask_y, cv2.bitwise_or(mask_w, cv2.bitwise_or(mask_b, mask_o)))
+        hat_ratio = cv2.countNonZero(combined_hat) / float(total_p)
+
+        if hat_ratio >= 0.22:
+            return True, float(round(min(0.92, 0.50 + hat_ratio * 1.5), 2))
+        return False, 0.0

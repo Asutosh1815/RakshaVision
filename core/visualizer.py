@@ -34,25 +34,33 @@ class SafetyVisualizer:
         workers: List[WorkerCompliance],
         hazards: List[HazardDetection],
         zone: ZoneConfig,
-        fps: float = 0.0
+        fps: float = 0.0,
+        show_boxes: bool = True,
+        show_badges: bool = True,
+        show_hazards: bool = True,
+        show_telemetry: bool = True,
+        show_confidence: bool = True
     ) -> np.ndarray:
         """
-        Draws the complete safety monitoring telemetry HUD onto the frame.
+        Draws the complete safety monitoring telemetry HUD onto the frame
+        with customizable layer toggles.
         """
         vis_frame = frame.copy()
-        h, w, _ = vis_frame.shape
 
-        # 1. Draw Hazards (Fire & Smoke) First (Background priority)
-        self._draw_hazards(vis_frame, hazards)
+        # 1. Draw Hazards (Fire & Smoke) First
+        if show_hazards and hazards:
+            self._draw_hazards(vis_frame, hazards)
 
         # 2. Draw Worker Compliance Bounding Boxes & Badges
-        self._draw_workers(vis_frame, workers, zone)
+        if (show_boxes or show_badges) and workers:
+            self._draw_workers(vis_frame, workers, zone, show_boxes, show_badges, show_confidence)
 
         # 3. Draw Top Information & Telemetry Banner
-        self._draw_top_telemetry(vis_frame, workers, hazards, zone, fps)
+        if show_telemetry:
+            self._draw_top_telemetry(vis_frame, workers, hazards, zone, fps)
 
         # 4. If critical hazard exists, draw perimeter alert strobe
-        if any(h.hazard_type in (HazardType.FIRE, HazardType.SMOKE) for h in hazards):
+        if show_hazards and any(h.hazard_type in (HazardType.FIRE, HazardType.SMOKE) for h in hazards):
             self._draw_perimeter_strobe(vis_frame)
 
         return vis_frame
@@ -61,7 +69,10 @@ class SafetyVisualizer:
         self,
         frame: np.ndarray,
         workers: List[WorkerCompliance],
-        zone: ZoneConfig
+        zone: ZoneConfig,
+        show_boxes: bool = True,
+        show_badges: bool = True,
+        show_confidence: bool = True
     ):
         for worker in workers:
             x1, y1, x2, y2 = worker.box.to_int_tuple()
@@ -82,43 +93,47 @@ class SafetyVisualizer:
                 color = self.COLOR_CYAN
                 status_text = "UNKNOWN"
 
-            # Draw corner brackets for high-tech HUD look
-            self._draw_corner_box(frame, x1, y1, x2, y2, color, thickness=2, corner_len=min(25, int(pw * 0.25)))
+            if show_boxes:
+                # Draw corner brackets for high-tech HUD look
+                self._draw_corner_box(frame, x1, y1, x2, y2, color, thickness=2, corner_len=min(25, int(pw * 0.25)))
 
-            # Main header label background
-            header_str = f"W#{worker.worker_id}: {status_text}"
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.48
-            thickness = 1
-            (text_w, text_h), baseline = cv2.getTextSize(header_str, font, font_scale, thickness)
+            if show_badges:
+                # Main header label background
+                header_str = f"W#{worker.worker_id}: {status_text}"
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 0.48
+                thickness = 1
+                (text_w, text_h), baseline = cv2.getTextSize(header_str, font, font_scale, thickness)
 
-            badge_y1 = max(0, y1 - text_h - 10)
-            badge_y2 = y1
-            cv2.rectangle(frame, (x1, badge_y1), (x1 + text_w + 14, badge_y2), color, -1)
-            cv2.putText(frame, header_str, (x1 + 6, badge_y2 - 5), font, font_scale, (0, 0, 0), 2, cv2.LINE_AA)
-            cv2.putText(frame, header_str, (x1 + 6, badge_y2 - 5), font, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
+                badge_y1 = max(0, y1 - text_h - 10)
+                badge_y2 = y1
+                cv2.rectangle(frame, (x1, badge_y1), (x1 + text_w + 14, badge_y2), color, -1)
+                cv2.putText(frame, header_str, (x1 + 6, badge_y2 - 5), font, font_scale, (0, 0, 0), 2, cv2.LINE_AA)
+                cv2.putText(frame, header_str, (x1 + 6, badge_y2 - 5), font, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
 
-            # Detailed PPE checklist tag underneath or inside
-            tag_y = y1 + 18
-            gear_items = []
-            if zone.require_helmet:
-                gear_items.append(("Helmet", worker.has_helmet))
-            if zone.require_vest:
-                gear_items.append(("Vest", worker.has_vest))
-            if zone.require_boots:
-                gear_items.append(("Boots", worker.has_boots))
-            if zone.require_gloves:
-                gear_items.append(("Gloves", worker.has_gloves))
+                # Detailed PPE checklist tag underneath
+                tag_y = y1 + 18
+                gear_items = []
+                if zone.require_helmet:
+                    gear_items.append(("Helmet", worker.has_helmet, worker.helmet_conf))
+                if zone.require_vest:
+                    gear_items.append(("Vest", worker.has_vest, worker.vest_conf))
+                if zone.require_boots:
+                    gear_items.append(("Boots", worker.has_boots, worker.boots_conf))
+                if zone.require_gloves:
+                    gear_items.append(("Gloves", worker.has_gloves, worker.gloves_conf))
 
-            for gear_name, present in gear_items:
-                indicator = "[+]" if present else "[X]"
-                item_str = f"{indicator} {gear_name}"
-                item_col = self.COLOR_SAFE if present else self.COLOR_DANGER
+                for gear_name, present, conf in gear_items:
+                    indicator = "[+]" if present else "[X]"
+                    conf_str = f" ({int(conf*100)}%)" if (show_confidence and conf > 0.05) else ""
+                    item_str = f"{indicator} {gear_name}{conf_str}"
+                    item_col = self.COLOR_SAFE if present else self.COLOR_DANGER
 
-                # Semi-transparent text background
-                cv2.rectangle(frame, (x1 + 4, tag_y - 12), (x1 + 105, tag_y + 3), (20, 20, 24), -1)
-                cv2.putText(frame, item_str, (x1 + 6, tag_y), cv2.FONT_HERSHEY_SIMPLEX, 0.40, item_col, 1, cv2.LINE_AA)
-                tag_y += 18
+                    (iw, ih), _ = cv2.getTextSize(item_str, cv2.FONT_HERSHEY_SIMPLEX, 0.40, 1)
+                    # Semi-transparent text background
+                    cv2.rectangle(frame, (x1 + 4, tag_y - 12), (x1 + max(110, iw + 10), tag_y + 4), (20, 20, 24), -1)
+                    cv2.putText(frame, item_str, (x1 + 6, tag_y), cv2.FONT_HERSHEY_SIMPLEX, 0.40, item_col, 1, cv2.LINE_AA)
+                    tag_y += 19
 
     def _draw_hazards(self, frame: np.ndarray, hazards: List[HazardDetection]):
         for h in hazards:

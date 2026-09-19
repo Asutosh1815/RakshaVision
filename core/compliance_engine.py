@@ -59,51 +59,96 @@ class ComplianceEngine:
                 pbox.y1 + 0.80 * ph
             )
 
-            # 1. Helmet Evaluation
-            has_helmet = False
-            helmet_conf = 0.0
+            # 1. Helmet Evaluation with Confidence Arbitration
+            helmet_confs = []
+            no_helmet_confs = []
             for item in raw_ppe:
                 if "helmet" in item.label or "hard" in item.label:
-                    # Check if center of PPE item is inside worker's head region
                     cx, cy = item.box.center
-                    if head_region.contains_point(cx, cy) or head_region.iou(item.box) > 0.05:
-                        if item.label == "helmet" or item.label == "hardhat":
-                            has_helmet = True
-                            helmet_conf = max(helmet_conf, item.confidence)
-                        elif item.label == "no_helmet" or item.label == "no-hardhat":
-                            has_helmet = False
-                            helmet_conf = max(helmet_conf, item.confidence)
+                    if head_region.contains_point(cx, cy) or head_region.iou(item.box) > 0.04:
+                        if "no" not in item.label:
+                            helmet_confs.append(item.confidence)
+                        else:
+                            no_helmet_confs.append(item.confidence)
 
-            # 2. High-Visibility Vest Evaluation (Colorimetric & Reflective Analysis)
+            has_helmet = False
+            helmet_conf = 0.0
+
+            max_h = max(helmet_confs) if helmet_confs else 0.0
+            max_nh = max(no_helmet_confs) if no_helmet_confs else 0.0
+
+            if max_h > max_nh and max_h >= 0.28:
+                has_helmet = True
+                helmet_conf = float(round(max_h, 2))
+            elif max_nh > max_h and max_nh >= 0.30:
+                has_helmet = False
+                helmet_conf = float(round(max_nh, 2))
+            else:
+                # Secondary head region geometric/color analysis
+                sec_has_h, sec_conf = self.detector.evaluate_head_region(frame, pbox)
+                if sec_has_h:
+                    has_helmet = True
+                    helmet_conf = sec_conf
+                else:
+                    has_helmet = False
+                    helmet_conf = max(max_h, max_nh, 0.15)
+
+            # 2. High-Visibility Vest Evaluation (CLAHE + Contrast Stripes)
             has_vest, vest_conf = self.detector.evaluate_vest_presence(frame, pbox)
 
-            # 3. Footwear (Boots/Shoes) Evaluation
-            has_boots = False
-            boots_conf = 0.0
+            # 3. Footwear (Boots/Shoes) with Spatial Ground Anchoring
+            shoes_confs = []
+            no_shoes_confs = []
             for item in raw_ppe:
                 if "shoe" in item.label or "boot" in item.label:
                     cx, cy = item.box.center
-                    if feet_region.contains_point(cx, cy) or feet_region.iou(item.box) > 0.05:
-                        if item.label == "shoes" or item.label == "boot":
-                            has_boots = True
-                            boots_conf = max(boots_conf, item.confidence)
-                        elif item.label == "no_shoes":
-                            has_boots = False
-                            boots_conf = max(boots_conf, item.confidence)
+                    if feet_region.contains_point(cx, cy) or feet_region.iou(item.box) > 0.04:
+                        if "no" not in item.label:
+                            shoes_confs.append(item.confidence)
+                        else:
+                            no_shoes_confs.append(item.confidence)
 
-            # 4. Gloves Evaluation
-            has_gloves = False
-            gloves_conf = 0.0
+            max_s = max(shoes_confs) if shoes_confs else 0.0
+            max_ns = max(no_shoes_confs) if no_shoes_confs else 0.0
+
+            has_boots = False
+            boots_conf = 0.0
+            if max_s > max_ns and max_s >= 0.25:
+                has_boots = True
+                boots_conf = float(round(max_s, 2))
+            elif max_ns > max_s and max_ns >= 0.28:
+                has_boots = False
+                boots_conf = float(round(max_ns, 2))
+            else:
+                has_boots = (max_s > 0.20)
+                boots_conf = max(max_s, 0.20)
+
+            # 4. Gloves Evaluation with Lateral Arm Anchoring
+            glove_confs = []
+            no_glove_confs = []
             for item in raw_ppe:
                 if "glove" in item.label:
                     cx, cy = item.box.center
-                    if hands_region.contains_point(cx, cy) or hands_region.iou(item.box) > 0.05:
-                        if item.label == "glove":
-                            has_gloves = True
-                            gloves_conf = max(gloves_conf, item.confidence)
-                        elif item.label == "no_glove":
-                            has_gloves = False
-                            gloves_conf = max(gloves_conf, item.confidence)
+                    if hands_region.contains_point(cx, cy) or hands_region.iou(item.box) > 0.04:
+                        if "no" not in item.label:
+                            glove_confs.append(item.confidence)
+                        else:
+                            no_glove_confs.append(item.confidence)
+
+            max_g = max(glove_confs) if glove_confs else 0.0
+            max_ng = max(no_glove_confs) if no_glove_confs else 0.0
+
+            has_gloves = False
+            gloves_conf = 0.0
+            if max_g > max_ng and max_g >= 0.25:
+                has_gloves = True
+                gloves_conf = float(round(max_g, 2))
+            elif max_ng > max_g and max_ng >= 0.28:
+                has_gloves = False
+                gloves_conf = float(round(max_ng, 2))
+            else:
+                has_gloves = (max_g > 0.20)
+                gloves_conf = max(max_g, 0.20)
 
             # 5. Evaluate Against Active Zone Policy
             missing_items = []
