@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Janbhasha Project Contributors
+Copyright (c) 2026 RakshaVision Project Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,10 +20,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Third-Party Attributions:
-- OpenAI Whisper: MIT License
-- AI4Bharat IndicTrans2: CC-BY-NC-4.0 / Research Open License
-- IndicTTS: Open Research Speech Corpus License
-- Sherpa-ONNX: Apache License 2.0
-- Ultralytics YOLO: AGPL-3.0 / Enterprise License
-- OpenCV: Apache License 2.0
+Third-Party Attributions & Open-Source Acknowledgments:
+- Ultralytics YOLOv8: AGPL-3.0 / Enterprise License (Ultralytics Inc.)
+- OpenCV (Open Source Computer Vision Library): Apache License 2.0
+- PyTorch & Torchvision: BSD-style License
+- Streamlit: Apache License 2.0
+- NumPy & Pandas: BSD 3-Clause License
+- Pre-trained PPE Models (keremberke): CC BY 4.0 / Open Research Weights
