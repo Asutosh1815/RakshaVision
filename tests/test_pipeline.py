@@ -28,7 +28,7 @@ def test_full_pipeline():
     zone_mgr = ZoneManager()
     zone = zone_mgr.get_zone("ZONE_FAB_BAY")
     assert zone is not None, "Failed to fetch zone configuration"
-    print("✓ All modules successfully initialized.")
+    print("[OK] All modules successfully initialized.")
 
     print("\n=== [TEST 2] Testing Worker & PPE Detection on Scenario Violation ===")
     img_violation = cv2.imread("demo_assets/scenario_violation.jpg")
@@ -42,7 +42,7 @@ def test_full_pipeline():
     workers = compliance_engine.evaluate_frame(img_violation, persons, raw_ppe, zone)
     metrics = compliance_engine.calculate_site_metrics(workers)
     print(f"Workers evaluated: {len(workers)}, Site metrics: {metrics}")
-    print("✓ Worker & compliance evaluation passed.")
+    print("[OK] Worker & compliance evaluation passed.")
 
     print("\n=== [TEST 3] Testing Fire & Smoke Hazard Detection ===")
     img_fire = cv2.imread("demo_assets/scenario_fire_hazard.jpg")
@@ -56,7 +56,7 @@ def test_full_pipeline():
     # Verify fire or smoke detected
     has_fire_or_smoke = any(h.hazard_type in (HazardType.FIRE, HazardType.SMOKE) for h in hazards)
     assert has_fire_or_smoke, "Hazard detector failed to flag flame/smoke in fire scene!"
-    print("✓ Hazard detection passed.")
+    print("[OK] Hazard detection passed.")
 
     print("\n=== [TEST 4] Testing Incident Logger & CSV Export ===")
     logged_hazards = logger.log_hazard_incidents(img_fire, hazards, zone)
@@ -65,13 +65,13 @@ def test_full_pipeline():
 
     csv_path = logger.export_csv("snapshots_test/test_audit_log.csv")
     assert os.path.exists(csv_path), "CSV export failed"
-    print(f"✓ Incident logger & CSV export passed ({os.path.getsize(csv_path)} bytes).")
+    print(f"[OK] Incident logger & CSV export passed ({os.path.getsize(csv_path)} bytes).")
 
     print("\n=== [TEST 5] Testing HUD Visualizer ===")
     hud_frame = visualizer.draw_hud(img_fire, workers, hazards, zone, fps=28.5)
     assert hud_frame.shape == img_fire.shape, "Visualizer changed frame dimensions"
     cv2.imwrite("snapshots_test/test_rendered_hud.jpg", hud_frame)
-    print("✓ HUD Visualizer passed, output saved to snapshots_test/test_rendered_hud.jpg.")
+    print("[OK] HUD Visualizer passed, output saved to snapshots_test/test_rendered_hud.jpg.")
 
     print("\n=== ALL PIPELINE TESTS PASSED SUCCESSFULLY! ===")
 

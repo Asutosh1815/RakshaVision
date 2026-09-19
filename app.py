@@ -5,6 +5,21 @@ Real-time PPE Compliance (Helmets, Vests, Boots, Gloves) & Early Fire/Smoke Haza
 
 import os
 import sys
+
+# Auto-launch with Streamlit if executed directly via "python app.py"
+if __name__ == "__main__":
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        if get_script_run_ctx() is None:
+            import subprocess
+            app_file = os.path.abspath(__file__)
+            cmd = [sys.executable, "-m", "streamlit", "run", app_file] + sys.argv[1:]
+            print("[*] Starting RakshaVision Command Center via Streamlit...")
+            print(f"[*] Command: {' '.join(cmd)}")
+            sys.exit(subprocess.call(cmd))
+    except Exception:
+        pass
+
 import time
 import tempfile
 from datetime import datetime
@@ -13,6 +28,15 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from PIL import Image
+
+# Streamlit backwards compatibility for image rendering
+from streamlit.delta_generator import DeltaGenerator
+_orig_dg_image = DeltaGenerator.image
+def _safe_dg_image(self, *args, **kwargs):
+    if "use_container_width" in kwargs:
+        kwargs["use_column_width"] = kwargs.pop("use_container_width")
+    return _orig_dg_image(self, *args, **kwargs)
+DeltaGenerator.image = _safe_dg_image
 
 # Ensure project root is in path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
@@ -139,7 +163,7 @@ incident_logger = st.session_state.incident_logger
 # SIDEBAR CONTROLS
 # -------------------------------------------------------------
 with st.sidebar:
-    st.image("https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400&auto=format&fit=crop", use_container_width=True)
+    st.image("https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400&auto=format&fit=crop", use_column_width=True)
     st.title("🛡️ RakshaVision AI")
     st.caption("Real-Time Industrial PPE & Hazard Command Center")
 
@@ -320,7 +344,7 @@ with tabs[0]:
 
             # Update Video Frame
             frame_rgb = cv2.cvtColor(rendered_frame, cv2.COLOR_BGR2RGB)
-            video_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
+            video_placeholder.image(frame_rgb, channels="RGB", use_column_width=True)
 
             # Update Metrics
             metric_workers.metric("Personnel On Site", f"{metrics['total_workers']}")
@@ -355,7 +379,7 @@ with tabs[0]:
         poster = cv2.imread("demo_assets/scenario_compliant.jpg")
         if poster is not None:
             rendered = visualizer.draw_hud(poster, [], [], current_zone, fps=0.0)
-            video_placeholder.image(cv2.cvtColor(rendered, cv2.COLOR_BGR2RGB), use_container_width=True)
+            video_placeholder.image(cv2.cvtColor(rendered, cv2.COLOR_BGR2RGB), use_column_width=True)
             metric_workers.metric("Personnel On Site", "2")
             metric_compliant.metric("Fully Compliant", "2", delta="Safe")
             metric_violations.metric("Active Violations", "0")
@@ -419,7 +443,7 @@ with tabs[1]:
             # Render HUD
             rendered_inspect = visualizer.draw_hud(img_raw, eval_workers, eval_hazards, current_zone, fps=30.0)
 
-            st.image(cv2.cvtColor(rendered_inspect, cv2.COLOR_BGR2RGB), use_container_width=True)
+            st.image(cv2.cvtColor(rendered_inspect, cv2.COLOR_BGR2RGB), use_column_width=True)
 
             # Worker Breakdown Cards
             st.markdown("### 👷 Detected Personnel Breakdown")
@@ -431,7 +455,7 @@ with tabs[1]:
                         x1, y1, x2, y2 = w.box.to_int_tuple()
                         crop = img_raw[max(0, y1):min(img_raw.shape[0], y2), max(0, x1):min(img_raw.shape[1], x2)]
                         if crop.size > 0:
-                            st.image(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), caption=f"Worker #{w.worker_id}", use_container_width=True)
+                            st.image(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), caption=f"Worker #{w.worker_id}", use_column_width=True)
 
                         status_col = "🟢" if w.status == ComplianceStatus.COMPLIANT else "🔴"
                         st.markdown(f"**Status:** {status_col} `{w.status.value}`")
@@ -492,7 +516,7 @@ with tabs[2]:
             s_cols = st.columns(min(4, len(recent_snaps)))
             for i, inc in enumerate(recent_snaps[:4]):
                 with s_cols[i]:
-                    st.image(inc.snapshot_path, caption=f"{inc.incident_id}\n{inc.details}", use_container_width=True)
+                    st.image(inc.snapshot_path, caption=f"{inc.incident_id}\n{inc.details}", use_column_width=True)
                     if not inc.acknowledged:
                         if st.button(f"Acknowledge", key=f"ack_{inc.incident_id}"):
                             incident_logger.acknowledge_incident(inc.incident_id)
