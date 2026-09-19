@@ -21,3 +21,7 @@ snapshots_test/
 Thumbs.db
 .vscode/
 .idea/
+
+# Large archives and training runs
+*.zip
+runs/

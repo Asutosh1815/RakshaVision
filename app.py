@@ -544,6 +544,9 @@ with tabs[1]:
         img_choice = st.selectbox(
             "Select Inspection Media",
             [
+                "Mendeley PPE Dataset: Construction Worker (Helmet + Vest)",
+                "Mendeley PPE Dataset: High-Vis Work Crew",
+                "Mendeley PPE Dataset: Site Inspection",
                 "Sample: Real Factory Floor Workers (PPE Verified)",
                 "Sample: Compliant Workers (Helmet + Vest)",
                 "Sample: Safety Violations (Missing Helmet/Vest)",
@@ -553,7 +556,13 @@ with tabs[1]:
         )
 
         test_img_path = None
-        if img_choice == "Sample: Real Factory Floor Workers (PPE Verified)":
+        if img_choice == "Mendeley PPE Dataset: Construction Worker (Helmet + Vest)":
+            test_img_path = "demo_assets/mendeley_samples/00009_jpg.rf.adeb008e3b04cd58befe5103ef49f566.jpg"
+        elif img_choice == "Mendeley PPE Dataset: High-Vis Work Crew":
+            test_img_path = "demo_assets/mendeley_samples/00016_jpg.rf.a5de42674ff1996a69f005db19136b4e.jpg"
+        elif img_choice == "Mendeley PPE Dataset: Site Inspection":
+            test_img_path = "demo_assets/mendeley_samples/00025_jpg.rf.75084f3cd7ae2aff6d2c8714db534bde.jpg"
+        elif img_choice == "Sample: Real Factory Floor Workers (PPE Verified)":
             test_img_path = "demo_assets/factory_worker_ppe.jpg"
         elif img_choice == "Sample: Compliant Workers (Helmet + Vest)":
             test_img_path = "demo_assets/scenario_compliant.jpg"
