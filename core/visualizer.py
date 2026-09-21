@@ -125,13 +125,12 @@ class SafetyVisualizer:
 
                 for gear_name, present, conf in gear_items:
                     indicator = "[+]" if present else "[X]"
-                    conf_str = f" ({int(conf*100)}%)" if (show_confidence and conf > 0.05) else ""
-                    item_str = f"{indicator} {gear_name}{conf_str}"
+                    item_str = f"{indicator} {gear_name}"
                     item_col = self.COLOR_SAFE if present else self.COLOR_DANGER
 
                     (iw, ih), _ = cv2.getTextSize(item_str, cv2.FONT_HERSHEY_SIMPLEX, 0.40, 1)
                     # Semi-transparent text background
-                    cv2.rectangle(frame, (x1 + 4, tag_y - 12), (x1 + max(110, iw + 10), tag_y + 4), (20, 20, 24), -1)
+                    cv2.rectangle(frame, (x1 + 4, tag_y - 12), (x1 + max(95, iw + 10), tag_y + 4), (20, 20, 24), -1)
                     cv2.putText(frame, item_str, (x1 + 6, tag_y), cv2.FONT_HERSHEY_SIMPLEX, 0.40, item_col, 1, cv2.LINE_AA)
                     tag_y += 19
 
@@ -141,10 +140,10 @@ class SafetyVisualizer:
 
             if h.hazard_type == HazardType.FIRE:
                 color = (0, 69, 255)  # Bright Flame Red-Orange
-                label = f"CRITICAL HAZARD: FIRE FLAME ({int(h.confidence*100)}%)"
+                label = "CRITICAL HAZARD: FIRE FLAME"
             else:
                 color = (200, 200, 200) # Smoke Gray
-                label = f"HAZARD: SMOKE PLUME ({int(h.confidence*100)}%)"
+                label = "HAZARD: SMOKE PLUME"
 
             # Draw dashed / thick hazard box
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3)

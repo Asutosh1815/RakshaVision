@@ -274,7 +274,7 @@ with st.sidebar:
         show_boxes = st.checkbox("Worker Bounding Boxes", value=True)
         show_badges = st.checkbox("Gear Badges & Checklist", value=True)
         show_hazards = st.checkbox("Fire / Smoke Hazard Boxes", value=True)
-        show_conf = st.checkbox("Confidence Scores (%)", value=True)
+        show_conf = st.checkbox("Confidence Scores (%)", value=False)
         show_hud = st.checkbox("Top Telemetry HUD Bar", value=True)
 
     with st.expander("⚙️ Policy Fine-Tuning", expanded=(policy_preset == "🛠️ Custom Configuration")):
@@ -624,24 +624,24 @@ with tabs[1]:
                                 st.image(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB), caption=f"Worker #{w.worker_id} Crop", use_column_width=True)
 
                         with c_gauges:
-                            # Hardhat Gauge
+                            # Hardhat
                             h_icon = "✅" if w.has_helmet else "❌"
-                            st.write(f"**Hardhat / Helmet:** {h_icon} ({int(w.helmet_conf*100)}%)")
+                            st.write(f"**Hardhat / Helmet:** {h_icon}")
                             st.progress(min(1.0, float(w.helmet_conf)))
 
-                            # Safety Vest Gauge
+                            # Safety Vest
                             v_icon = "✅" if w.has_vest else "❌"
-                            st.write(f"**High-Vis Safety Vest:** {v_icon} ({int(w.vest_conf*100)}%)")
+                            st.write(f"**High-Vis Safety Vest:** {v_icon}")
                             st.progress(min(1.0, float(w.vest_conf)))
 
-                            # Boots Gauge
+                            # Boots
                             b_icon = "✅" if w.has_boots else "❌"
-                            st.write(f"**Safety Footwear / Boots:** {b_icon} ({int(w.boots_conf*100)}%)")
+                            st.write(f"**Safety Footwear / Boots:** {b_icon}")
                             st.progress(min(1.0, float(w.boots_conf)))
 
-                            # Gloves Gauge
+                            # Gloves
                             g_icon = "✅" if w.has_gloves else "❌"
-                            st.write(f"**Safety Gloves:** {g_icon} ({int(w.gloves_conf*100)}%)")
+                            st.write(f"**Safety Gloves:** {g_icon}")
                             st.progress(min(1.0, float(w.gloves_conf)))
 
                             if w.missing_items:
@@ -652,7 +652,7 @@ with tabs[1]:
             if eval_hazards:
                 st.markdown("### 🔥 Detected Environmental Hazards")
                 for h in eval_hazards:
-                    st.error(f"🚨 **{h.hazard_type.value}:** {h.description} (Confidence: {int(h.confidence*100)}%) - Severity: `{h.severity.value}`")
+                    st.error(f"🚨 **{h.hazard_type.value}:** {h.description} - Severity: `{h.severity.value}`")
 
 
 # -------------------------------------------------------------
