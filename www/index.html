@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>RakshaVision Mobile Command</title>
+  <style>
+    :root {
+      --bg-dark: #070b14;
+      --bg-card: rgba(17, 24, 39, 0.85);
+      --border-card: rgba(255, 255, 255, 0.08);
+      --primary: #06b6d4;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      padding-bottom: 70px;
+    }
+
+    /* Top Navigation Header */
+    .top-bar {
+      background: rgba(10, 16, 30, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border-card);
+      padding: 14px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-icon {
+      font-size: 1.5rem;
+    }
+
+    .brand-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+
+    .brand-subtitle {
+      font-size: 0.7rem;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .status-pulse {
+      width: 7px;
+      height: 7px;
+      background-color: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #10b981;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
+    }
+
+    /* Tab Content Container */
+    .container {
+      padding: 16px;
+      flex: 1;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    }
+
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Video Feed Screen */
+    .feed-viewport {
+      position: relative;
+      width: 100%;
+      height: 240px;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .feed-viewport img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .feed-overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    .feed-cam-tag {
+      background: rgba(0, 0, 0, 0.75);
+      border: 1px solid var(--primary);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-family: monospace;
+      color: #38bdf8;
+    }
+
+    .feed-rec-tag {
+      background: rgba(239, 68, 68, 0.85);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Bounding Box HUD simulator inside viewport */
+    .hud-box {
+      position: absolute;
+      border: 2px solid #10b981;
+      border-radius: 4px;
+      pointer-events: none;
+    }
+
+    .hud-box.violation {
+      border-color: #ef4444;
+    }
+
+    .hud-badge {
+      position: absolute;
+      top: -24px;
+      left: -2px;
+      background: #10b981;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px 3px 0 0;
+      white-space: nowrap;
+    }
+
+    .hud-box.violation .hud-badge {
+      background: #ef4444;
+    }
+
+    .hud-tags {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .hud-tag-item {
+      background: rgba(20, 20, 24, 0.9);
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 0.65rem;
+      font-weight: 600;
+    }
+
+    .hud-tag-safe { color: #10b981; }
+    .hud-tag-danger { color: #ef4444; }
+
+    /* Camera Chips */
+    .chips-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 4px 0 12px 0;
+      scrollbar-width: none;
+    }
+    .chips-scroll::-webkit-scrollbar { display: none; }
+
+    .chip {
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid var(--border-card);
+      color: var(--text-muted);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .chip.active {
+      background: var(--primary);
+      color: #04131f;
+      font-weight: 700;
+      border-color: var(--primary);
+      box-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
+    }
+
+    /* Telemetry KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .kpi-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-card);
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .kpi-val {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .kpi-lbl {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Panic Siren Button */
+    .panic-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #dc2626, #991b1b);
+      border: 1px solid #f87171;
+      color: #fff;
+      padding: 16px;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      box-shadow: 0 4px 15px rgba(220, 38, 38, 0.5);
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .panic-btn:active {
+      transform: scale(0.98);
+      filter: brightness(0.9);
+    }
+
+    /* Worker List Items */
+    .worker-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 10px;
+      border: 1px solid var(--border-card);
+      margin-bottom: 8px;
+    }
+
+    .worker-id {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #fff;
+    }
+
+    .worker-gears {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+      font-size: 0.75rem;
+    }
+
+    .gear-pill {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .gear-pill.ok {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+    .gear-pill.miss {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+    }
+
+    /* Incident Stream List */
+    .incident-item {
+      padding: 12px;
+      border-left: 4px solid var(--danger);
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 10px;
+    }
+    .incident-item.warn {
+      border-left-color: var(--warning);
+    }
+
+    .incident-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .incident-time {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-weight: normal;
+    }
+
+    .incident-body {
+      font-size: 0.8rem;
+      color: #cbd5e1;
+    }
+
+    /* Input & Connect Section */
+    .input-group {
+      margin-bottom: 14px;
+    }
+
+    .input-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.9rem;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #04131f;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      border: 1px solid var(--border-card);
+      margin-top: 8px;
+    }
+
+    /* Bottom Navigation Bar */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 62px;
+      background: rgba(10, 16, 30, 0.98);
+      border-top: 1px solid var(--border-card);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 100;
+      backdrop-filter: blur(16px);
+    }
+
+    .nav-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px;
+      width: 25%;
+    }
+
+    .nav-btn.active {
+      color: var(--primary);
+    }
+
+    .nav-btn span.icon {
+      font-size: 1.25rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <div class="brand">
+      <span class="brand-icon">🛡️</span>
+      <div>
+        <div class="brand-title">RakshaVision</div>
+        <div class="brand-subtitle">Mobile Command</div>
+      </div>
+    </div>
+    <div class="status-badge">
+      <div class="status-pulse"></div>
+      <span id="header-status">ONLINE</span>
+    </div>
+  </header>
+
+  <!-- Content Container -->
+  <main class="container">
+
+    <!-- TAB 1: LIVE FEED -->
+    <section id="tab-feeds" class="tab-content active">
+      <div class="chips-scroll">
+        <button class="chip active" onclick="switchCamera(0, this)">CAM-01: Machining</button>
+        <button class="chip" onclick="switchCamera(1, this)">CAM-02: Welding & Fire</button>
+        <button class="chip" onclick="switchCamera(2, this)">CAM-03: Logistics Dock</button>
+        <button class="chip" onclick="switchCamera(3, this)">CAM-04: Assembly PPE</button>
+      </div>
+
+      <div class="card" style="padding: 10px;">
+        <div class="feed-viewport" id="viewport">
+          <img id="feed-image" src="assets/scenario_compliant.jpg" alt="CCTV Feed" />
+          <div class="feed-overlay">
+            <span class="feed-cam-tag" id="cam-tag">CAM-01 [LIVE 25 FPS]</span>
+            <span class="feed-rec-tag">● REC</span>
+          </div>
+
+          <!-- Dynamic HUD Overlays (Clean labels without percentages) -->
+          <div id="hud-container">
+            <div class="hud-box" style="top: 25%; left: 35%; width: 30%; height: 60%;">
+              <div class="hud-badge">W#101: COMPLIANT</div>
+              <div class="hud-tags">
+                <span class="hud-tag-item hud-tag-safe">[+] Helmet</span>
+                <span class="hud-tag-item hud-tag-safe">[+] Vest</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-box">
+            <div class="kpi-val" id="kpi-workers" style="color: #38bdf8;">3</div>
+            <div class="kpi-lbl">Monitored Personnel</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-val" id="kpi-compliance" style="color: #10b981;">100%</div>
+            <div class="kpi-lbl">PPE Compliance</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-val" id="kpi-hazards" style="color: #34d399;">NORMAL</div>
+            <div class="kpi-lbl">Thermal / Hazard</div>
+          </div>
+          <div class="kpi-box">
+            <div class="kpi-val" id="kpi-fps" style="color: #cbd5e1;">25.2</div>
+            <div class="kpi-lbl">Stream FPS</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Emergency Panic Siren -->
+      <button class="panic-btn" onclick="triggerEmergencyPanic()">
+        <span>🚨</span> TRIGGER EMERGENCY SIREN
+      </button>
+    </section>
+
+    <!-- TAB 2: INCIDENTS -->
+    <section id="tab-incidents" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span>🚨 Live Incident Dispatch</span>
+          <span style="font-size: 0.75rem; color: var(--primary);" onclick="clearIncidents()">Clear Log</span>
+        </div>
+
+        <div id="incident-list">
+          <div class="incident-item">
+            <div class="incident-header">
+              <span style="color: #ef4444;">CRITICAL: MISSING HARDHAT</span>
+              <span class="incident-time">2 mins ago</span>
+            </div>
+            <div class="incident-body">
+              Zone: Bay 2 - Chemical & Welding | Worker #104 detected without required safety helmet.
+            </div>
+          </div>
+
+          <div class="incident-item warn">
+            <div class="incident-header">
+              <span style="color: #f59e0b;">WARNING: HIGH-VIS VEST ABSENT</span>
+              <span class="incident-time">14 mins ago</span>
+            </div>
+            <div class="incident-body">
+              Zone: Bay 3 - Logistics Dock | Forklift operation zone entered without reflective vest.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: WORKERS -->
+    <section id="tab-workers" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span>👷 Personnel Gear Compliance</span>
+          <span style="font-size: 0.75rem; color: #10b981;">3 Active</span>
+        </div>
+
+        <div class="worker-card">
+          <div>
+            <div class="worker-id">Worker #101 (Fabrication Lead)</div>
+            <div class="worker-gears">
+              <span class="gear-pill ok">Helmet [+]</span>
+              <span class="gear-pill ok">Vest [+]</span>
+              <span class="gear-pill ok">Boots [+]</span>
+            </div>
+          </div>
+          <span style="color: #10b981; font-weight: 700; font-size: 0.8rem;">COMPLIANT</span>
+        </div>
+
+        <div class="worker-card">
+          <div>
+            <div class="worker-id">Worker #102 (Welder)</div>
+            <div class="worker-gears">
+              <span class="gear-pill ok">Helmet [+]</span>
+              <span class="gear-pill ok">Vest [+]</span>
+              <span class="gear-pill ok">Gloves [+]</span>
+            </div>
+          </div>
+          <span style="color: #10b981; font-weight: 700; font-size: 0.8rem;">COMPLIANT</span>
+        </div>
+
+        <div class="worker-card">
+          <div>
+            <div class="worker-id">Worker #103 (Machinist)</div>
+            <div class="worker-gears">
+              <span class="gear-pill miss">Helmet [X]</span>
+              <span class="gear-pill ok">Vest [+]</span>
+            </div>
+          </div>
+          <span style="color: #ef4444; font-weight: 700; font-size: 0.8rem;">VIOLATION</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: SETTINGS / CONNECT -->
+    <section id="tab-settings" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span>⚙️ RakshaVision Server Ingestion</span>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">Backend Command Center URL / LAN IP:</label>
+          <input type="text" id="server-url" class="input-field" value="http://10.0.2.2:8501" placeholder="http://192.168.1.100:8501" />
+          <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: 4px;">
+            Tip: For Android Emulator use <code>http://10.0.2.2:8501</code>. For physical devices on Wi-Fi, enter your PC's IP.
+          </small>
+        </div>
+
+        <button class="btn btn-primary" onclick="launchFullDashboard()">
+          <span>🚀</span> Open Full AI Command Center
+        </button>
+
+        <button class="btn btn-secondary" onclick="testServerConnection()">
+          <span>🔄</span> Ping Server Status
+        </button>
+
+        <div id="conn-result" style="margin-top: 10px; font-size: 0.8rem;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>🔊 Sound & Emergency Alerts</span>
+        </div>
+        <button class="btn btn-secondary" onclick="testAudioSiren()">
+          <span>📢</span> Test Web Audio Siren
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Navigation Bar -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="showTab('feeds', this)">
+      <span class="icon">📹</span>
+      <span>Live CCTV</span>
+    </button>
+    <button class="nav-btn" onclick="showTab('incidents', this)">
+      <span class="icon">🚨</span>
+      <span>Alerts</span>
+    </button>
+    <button class="nav-btn" onclick="showTab('workers', this)">
+      <span class="icon">👷</span>
+      <span>Personnel</span>
+    </button>
+    <button class="nav-btn" onclick="showTab('settings', this)">
+      <span class="icon">⚙️</span>
+      <span>Server</span>
+    </button>
+  </nav>
+
+  <script>
+    // Tab Switching
+    function showTab(tabId, el) {
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('tab-' + tabId).classList.add('active');
+      el.classList.add('active');
+    }
+
+    // Camera Switcher
+    const cameras = [
+      {
+        name: "CAM-01 [LIVE 25 FPS]",
+        img: "assets/scenario_compliant.jpg",
+        workers: 2,
+        compliance: "100%",
+        hazard: "NORMAL",
+        hud: `
+          <div class="hud-box" style="top: 25%; left: 30%; width: 28%; height: 60%;">
+            <div class="hud-badge">W#101: COMPLIANT</div>
+            <div class="hud-tags">
+              <span class="hud-tag-item hud-tag-safe">[+] Helmet</span>
+              <span class="hud-tag-item hud-tag-safe">[+] Vest</span>
+            </div>
+          </div>
+        `
+      },
+      {
+        name: "CAM-02 [FIRE WATCH]",
+        img: "assets/scenario_fire_hazard.jpg",
+        workers: 0,
+        compliance: "N/A",
+        hazard: "FIRE ALERT",
+        hud: `
+          <div class="hud-box violation" style="top: 35%; left: 40%; width: 35%; height: 45%;">
+            <div class="hud-badge">CRITICAL HAZARD: FIRE FLAME</div>
+          </div>
+        `
+      },
+      {
+        name: "CAM-03 [LOGISTICS]",
+        img: "assets/scenario_violation.jpg",
+        workers: 1,
+        compliance: "VIOLATION",
+        hazard: "NORMAL",
+        hud: `
+          <div class="hud-box violation" style="top: 20%; left: 35%; width: 30%; height: 65%;">
+            <div class="hud-badge">W#103: VIOLATION</div>
+            <div class="hud-tags">
+              <span class="hud-tag-item hud-tag-danger">[X] Helmet</span>
+              <span class="hud-tag-item hud-tag-safe">[+] Vest</span>
+            </div>
+          </div>
+        `
+      },
+      {
+        name: "CAM-04 [INSPECTION]",
+        img: "assets/factory_worker_ppe.jpg",
+        workers: 1,
+        compliance: "100%",
+        hazard: "NORMAL",
+        hud: `
+          <div class="hud-box" style="top: 15%; left: 32%; width: 34%; height: 75%;">
+            <div class="hud-badge">W#104: COMPLIANT</div>
+            <div class="hud-tags">
+              <span class="hud-tag-item hud-tag-safe">[+] Helmet</span>
+              <span class="hud-tag-item hud-tag-safe">[+] Vest</span>
+              <span class="hud-tag-item hud-tag-safe">[+] Boots</span>
+            </div>
+          </div>
+        `
+      }
+    ];
+
+    function switchCamera(index, chipEl) {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chipEl.classList.add('active');
+
+      const cam = cameras[index];
+      document.getElementById('feed-image').src = cam.img;
+      document.getElementById('cam-tag').innerText = cam.name;
+      document.getElementById('kpi-workers').innerText = cam.workers;
+      document.getElementById('kpi-compliance').innerText = cam.compliance;
+      document.getElementById('kpi-compliance').style.color = cam.compliance === '100%' ? '#10b981' : (cam.compliance === 'VIOLATION' ? '#ef4444' : '#94a3b8');
+      document.getElementById('kpi-hazards').innerText = cam.hazard;
+      document.getElementById('kpi-hazards').style.color = cam.hazard === 'NORMAL' ? '#34d399' : '#ef4444';
+      document.getElementById('hud-container').innerHTML = cam.hud;
+    }
+
+    // Audio Siren Synthesizer using Web Audio API
+    function playSirenSound(durationMs = 2000) {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(650, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(950, ctx.currentTime + 0.3);
+        osc.frequency.linearRampToValueAtTime(650, ctx.currentTime + 0.6);
+        osc.frequency.linearRampToValueAtTime(950, ctx.currentTime + 0.9);
+        osc.frequency.linearRampToValueAtTime(650, ctx.currentTime + 1.2);
+
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + (durationMs / 1000));
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc.stop(ctx.currentTime + (durationMs / 1000));
+      } catch (e) {
+        console.warn("Audio Context not allowed without interaction", e);
+      }
+    }
+
+    function triggerEmergencyPanic() {
+      playSirenSound(3000);
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200, 100, 500]);
+      }
+      alert("🚨 EMERGENCY PANIC DISPATCHED!\nEvacuation siren activated on factory floor. Incident logged.");
+
+      // Add to incident list
+      const list = document.getElementById('incident-list');
+      const item = document.createElement('div');
+      item.className = 'incident-item';
+      item.innerHTML = `
+        <div class="incident-header">
+          <span style="color: #ef4444;">🚨 MANUAL PANIC ALARM</span>
+          <span class="incident-time">Just now</span>
+        </div>
+        <div class="incident-body">
+          Manual evacuation siren triggered by Mobile Command Officer. Emergency dispatch broadcasted.
+        </div>
+      `;
+      list.prepend(item);
+    }
+
+    function testAudioSiren() {
+      playSirenSound(1500);
+    }
+
+    function clearIncidents() {
+      document.getElementById('incident-list').innerHTML = '<div style="color: #94a3b8; font-size: 0.8rem; padding: 8px;">No active safety violations recorded.</div>';
+    }
+
+    function launchFullDashboard() {
+      const url = document.getElementById('server-url').value.trim();
+      if (url) {
+        window.location.href = url;
+      }
+    }
+
+    function testServerConnection() {
+      const url = document.getElementById('server-url').value.trim();
+      const res = document.getElementById('conn-result');
+      res.innerHTML = '<span style="color: #38bdf8;">Connecting to ' + url + '...</span>';
+
+      fetch(url, { mode: 'no-cors' })
+        .then(() => {
+          res.innerHTML = '<span style="color: #10b981;">✅ Server Reachable! Ready for full dashboard.</span>';
+        })
+        .catch(err => {
+          res.innerHTML = '<span style="color: #f59e0b;">⚠️ Connected or requires CORS. You can tap "Open Full AI Command Center" to launch directly.</span>';
+        });
+    }
+  </script>
+</body>
+</html>

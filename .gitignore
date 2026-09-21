@@ -25,3 +25,15 @@ Thumbs.db
 # Large archives and training runs
 *.zip
 runs/
+
+# Node & Frontend dependencies
+node_modules/
+
+# Android Build Artefacts
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/*.iml
