@@ -190,34 +190,23 @@ if "alert_router" not in st.session_state:
 if "audio_alerts_enabled" not in st.session_state:
     st.session_state.audio_alerts_enabled = True
 
+if "manual_siren_active" not in st.session_state:
+    st.session_state.manual_siren_active = False
+
+from core.siren import play_siren_audio, generate_siren_wav, render_siren_audio
+
 detector, hazard_det, compliance_engine, visualizer, zone_manager = load_system_engine()
 incident_logger = st.session_state.incident_logger
 alert_router = st.session_state.alert_router
 
 
-def play_audio_siren():
-    """Renders HTML5 Web Audio synthesized siren beep without external mp3 files."""
-    if st.session_state.audio_alerts_enabled:
-        st.markdown("""
-        <script>
-        (function() {
-            try {
-                var ctx = new (window.AudioContext || window.webkitAudioContext)();
-                var osc = ctx.createOscillator();
-                var gain = ctx.createGain();
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(880, ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.35);
-                gain.gain.setValueAtTime(0.3, ctx.currentTime);
-                gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.36);
-            } catch(e) {}
-        })();
-        </script>
-        """, unsafe_allow_html=True)
+def play_audio_siren(continuous: bool = False):
+    """
+    Renders cross-browser industrial emergency wail siren audio
+    using native Streamlit audio with autoplay AND Web Audio API fallback.
+    """
+    if st.session_state.get("audio_alerts_enabled", True):
+        play_siren_audio(continuous=continuous)
 
 
 # -------------------------------------------------------------
@@ -270,6 +259,30 @@ with st.sidebar:
     st.caption(f"**Zone Detail:** {current_zone.location_desc}")
 
     st.markdown("---")
+    st.subheader("🚨 Emergency Evacuation Siren")
+    is_siren_on = st.session_state.get("manual_siren_active", False)
+
+    if is_siren_on:
+        st.error("📢 **SIREN WAILING LIVE!**")
+        if st.button("⏹️ MUTE / STOP SIREN", use_container_width=True, type="primary", key="sb_mute_siren"):
+            st.session_state.manual_siren_active = False
+            st.rerun()
+    else:
+        if st.button("🚨 TRIGGER MANUAL SIREN", use_container_width=True, type="primary", key="sb_trigger_siren"):
+            st.session_state.manual_siren_active = True
+            alert_router.route_hazard(HazardType.FIRE, 1.0, current_zone)
+            st.toast("🚨 EMERGENCY EVACUATION SIREN ACTIVATED!", icon="🚨")
+            st.rerun()
+
+    with st.expander("🔊 Siren Audio Player & Settings", expanded=is_siren_on):
+        st.caption("Industrial emergency wail audio test:")
+        st.audio(generate_siren_wav(duration_sec=2.5), format="audio/wav")
+        st.session_state.audio_alerts_enabled = st.checkbox(
+            "Enable Automatic AI Siren on Hazards",
+            value=st.session_state.get("audio_alerts_enabled", True)
+        )
+
+    st.markdown("---")
     st.subheader("📹 Ingestion Stream")
     feed_mode = st.radio(
         "Feed Selector",
@@ -294,8 +307,6 @@ with st.sidebar:
 
         conf_thresh = st.slider("Worker AI Confidence", min_value=0.15, max_value=0.85, value=0.30, step=0.05)
         hazard_sensitivity = st.slider("Hazard Sensitivity", min_value=0.20, max_value=0.85, value=0.45, step=0.05)
-
-    st.session_state.audio_alerts_enabled = st.checkbox("🔊 Enable Web Audio Siren Alerts", value=st.session_state.audio_alerts_enabled)
 
     # Sync policy to active zone
     current_zone.require_helmet = req_helmet
@@ -326,6 +337,15 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+if st.session_state.get("manual_siren_active", False):
+    c_alert_text, c_alert_btn = st.columns([4, 1])
+    with c_alert_text:
+        st.error("🚨 **MANUAL EMERGENCY EVACUATION SIREN IS ACTIVE! BROADCASTING DELUGE ALARM.**")
+    with c_alert_btn:
+        if st.button("⏹️ MUTE SIREN", type="primary", use_container_width=True, key="top_mute_btn"):
+            st.session_state.manual_siren_active = False
+            st.rerun()
+    play_audio_siren(continuous=True)
 
 tabs = st.tabs([
     "📹 Live CCTV Stream",
@@ -423,7 +443,19 @@ with tabs[0]:
             frame_count = 0
             current_fps = 0.0
 
-            stop_button = st.button("⏹ Pause Monitoring Feed")
+            col_ctrl1, col_ctrl2 = st.columns([1, 1])
+            with col_ctrl1:
+                stop_button = st.button("⏹ Pause Monitoring Feed", use_container_width=True)
+            with col_ctrl2:
+                if st.session_state.get("manual_siren_active", False):
+                    if st.button("⏹️ MUTE SIREN", type="primary", use_container_width=True, key="stream_mute_btn"):
+                        st.session_state.manual_siren_active = False
+                        st.rerun()
+                else:
+                    if st.button("🚨 TRIGGER EMERGENCY SIREN", type="secondary", use_container_width=True, key="stream_siren_btn"):
+                        st.session_state.manual_siren_active = True
+                        alert_router.route_hazard(HazardType.FIRE, 1.0, current_zone)
+                        st.rerun()
 
             while cap.isOpened() and not stop_button:
                 ret, frame = cap.read()
@@ -494,13 +526,20 @@ with tabs[0]:
                 has_fire = any(h.hazard_type == HazardType.FIRE for h in hazards)
                 has_smoke = any(h.hazard_type == HazardType.SMOKE for h in hazards)
 
-                if has_fire:
-                    play_audio_siren()
-                    alert_placeholder.markdown("""
-                    <div class="emergency-fire-banner">
-                        🔥 <strong>CRITICAL EMERGENCY:</strong> ACTIVE FIRE FLAME DETECTED! DISPATCHING AUTOMATED ALARM & SUPPRESSION IN ZONE.
-                    </div>
-                    """, unsafe_allow_html=True)
+                if has_fire or st.session_state.get("manual_siren_active", False):
+                    play_audio_siren(continuous=True)
+                    if st.session_state.get("manual_siren_active", False):
+                        alert_placeholder.markdown("""
+                        <div class="emergency-fire-banner" style="background: linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%);">
+                            🚨 <strong>MANUAL EVACUATION DELUGE:</strong> EMERGENCY SIREN ACTIVATED BY OPERATOR!
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        alert_placeholder.markdown("""
+                        <div class="emergency-fire-banner">
+                            🔥 <strong>CRITICAL EMERGENCY:</strong> ACTIVE FIRE FLAME DETECTED! DISPATCHING AUTOMATED ALARM & SUPPRESSION IN ZONE.
+                        </div>
+                        """, unsafe_allow_html=True)
                 elif has_smoke:
                     alert_placeholder.markdown("""
                     <div class="emergency-fire-banner" style="background: linear-gradient(135deg, #475569 0%, #334155 100%); border-color:#94a3b8;">
@@ -704,6 +743,37 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("🚨 Location-Aware Role Dispatch & Emergency SOPs")
     st.caption("Context-carrying alerts routed to specific personnel roles with actionable step-by-step Standard Operating Procedures.")
+
+    # Manual Evacuation Siren Deluge Control Station
+    with st.container():
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, rgba(220, 38, 38, 0.15) 0%, rgba(153, 27, 27, 0.25) 100%); border: 2px solid #ef4444; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;">
+            <h4 style="margin: 0; color: #f87171;">🚨 Site-Wide Emergency Evacuation Siren Deluge</h4>
+            <p style="margin: 4px 0 0 0; color: #cbd5e1; font-size: 0.88rem;">Immediate manual override to broadcast evacuation sirens and trigger high-priority emergency SOPs across all factory bays.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_deluge1, col_deluge2, col_deluge3 = st.columns([2, 1, 1])
+        with col_deluge1:
+            if st.session_state.get("manual_siren_active", False):
+                st.error("📢 **DELUGE BROADCAST ACTIVE: SIREN IS WAILING ACROSS ALL TERMINALS**")
+            else:
+                st.info("ℹ️ System Standby. Triggering sounds the siren and issues emergency protocols to the Fire Marshal.")
+        with col_deluge2:
+            if not st.session_state.get("manual_siren_active", False):
+                if st.button("🚨 TRIGGER SIREN NOW", type="primary", use_container_width=True, key="tab3_deluge_trigger"):
+                    st.session_state.manual_siren_active = True
+                    alert_router.route_hazard(HazardType.FIRE, 1.0, current_zone)
+                    st.toast("🚨 EMERGENCY EVACUATION SIREN ACTIVATED!", icon="🚨")
+                    st.rerun()
+            else:
+                if st.button("⏹️ MUTE DELUGE", type="secondary", use_container_width=True, key="tab3_deluge_mute"):
+                    st.session_state.manual_siren_active = False
+                    st.rerun()
+        with col_deluge3:
+            if st.button("🔊 Sound Test Siren", use_container_width=True, key="tab3_test_siren"):
+                play_audio_siren(continuous=False)
+                st.toast("Sounding test siren...", icon="📢")
 
     # Actionable Alert Cards from AlertRouter
     active_dispatches = alert_router.get_recent_alerts(limit=8)
