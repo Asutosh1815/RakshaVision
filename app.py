@@ -1,6 +1,6 @@
 """
-RakshaVision AI - Next-Gen Industrial Safety & Hazard Command Center.
-Real-Time PPE Compliance Detection (Helmets, Vests, Boots, Gloves) & Sub-Second Fire/Smoke Hazard Intervention.
+RakshaVision AI - Industrial Safety & Hazard Command Center Dashboard.
+Real-Time 4-Point PPE Compliance (Helmets, Vests, Boots, Gloves) & Sub-Second Fire/Smoke Hazard Intervention.
 """
 
 import os
