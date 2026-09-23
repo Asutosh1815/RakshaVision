@@ -30,6 +30,8 @@ class ComplianceEngine:
     ) -> List[WorkerCompliance]:
         """
         Associates detected PPE with each worker and evaluates compliance against the zone's policy.
+        Uses per-person PPE crops for boots and gloves to improve spatial accuracy.
+        Confidence thresholds are lowered to improve recall.
         """
         worker_records: List[WorkerCompliance] = []
 
@@ -59,17 +61,26 @@ class ComplianceEngine:
                 pbox.y1 + 0.80 * ph
             )
 
-            # 1. Helmet Evaluation with Confidence Arbitration
+            # Run per-person PPE crop inference (much better spatial accuracy for boots/gloves)
+            per_person_ppe = self.detector.detect_ppe_for_person(frame, pbox)
+
+            # Merge global raw_ppe + per-person results (per-person gets priority)
+            # Use global ppe for helmet/vest only (they cover larger body regions)
+            global_ppe = raw_ppe  # helmet & vest come from global scan
+
+            # --- 1. Helmet Evaluation ---
             helmet_confs = []
             no_helmet_confs = []
-            for item in raw_ppe:
-                if "helmet" in item.label or "hard" in item.label:
-                    cx, cy = item.box.center
-                    if head_region.contains_point(cx, cy) or head_region.iou(item.box) > 0.04:
-                        if "no" not in item.label:
-                            helmet_confs.append(item.confidence)
-                        else:
-                            no_helmet_confs.append(item.confidence)
+            # Check both global and per-person detections
+            for ppe_source in [global_ppe, per_person_ppe]:
+                for item in ppe_source:
+                    if "helmet" in item.label or "hard" in item.label:
+                        cx, cy = item.box.center
+                        if head_region.contains_point(cx, cy) or head_region.iou(item.box) > 0.04:
+                            if "no" not in item.label:
+                                helmet_confs.append(item.confidence)
+                            else:
+                                no_helmet_confs.append(item.confidence)
 
             has_helmet = False
             helmet_conf = 0.0
@@ -77,10 +88,11 @@ class ComplianceEngine:
             max_h = max(helmet_confs) if helmet_confs else 0.0
             max_nh = max(no_helmet_confs) if no_helmet_confs else 0.0
 
-            if max_h > max_nh and max_h >= 0.28:
+            # Lowered thresholds: 0.28 → 0.22, 0.30 → 0.25
+            if max_h > max_nh and max_h >= 0.22:
                 has_helmet = True
                 helmet_conf = float(round(max_h, 2))
-            elif max_nh > max_h and max_nh >= 0.30:
+            elif max_nh > max_h and max_nh >= 0.25:
                 has_helmet = False
                 helmet_conf = float(round(max_nh, 2))
             else:
@@ -93,7 +105,7 @@ class ComplianceEngine:
                     has_helmet = False
                     helmet_conf = max(max_h, max_nh, 0.15)
 
-            # 2. High-Visibility Vest Evaluation (Neural Model + Strict Optical Verification)
+            # --- 2. High-Visibility Vest Evaluation ---
             vest_region = BoundingBox(
                 pbox.x1 - 0.08 * pw,
                 pbox.y1 + 0.14 * ph,
@@ -102,14 +114,15 @@ class ComplianceEngine:
             )
             vest_confs = []
             no_vest_confs = []
-            for item in raw_ppe:
-                if "vest" in item.label:
-                    cx, cy = item.box.center
-                    if vest_region.contains_point(cx, cy) or vest_region.iou(item.box) > 0.04:
-                        if "no" not in item.label:
-                            vest_confs.append(item.confidence)
-                        else:
-                            no_vest_confs.append(item.confidence)
+            for ppe_source in [global_ppe, per_person_ppe]:
+                for item in ppe_source:
+                    if "vest" in item.label:
+                        cx, cy = item.box.center
+                        if vest_region.contains_point(cx, cy) or vest_region.iou(item.box) > 0.04:
+                            if "no" not in item.label:
+                                vest_confs.append(item.confidence)
+                            else:
+                                no_vest_confs.append(item.confidence)
 
             max_v = max(vest_confs) if vest_confs else 0.0
             max_nv = max(no_vest_confs) if no_vest_confs else 0.0
@@ -117,23 +130,35 @@ class ComplianceEngine:
             has_vest = False
             vest_conf = 0.0
 
-            if max_v > max_nv and max_v >= 0.28:
+            # Lowered thresholds: 0.28 → 0.22
+            if max_v > max_nv and max_v >= 0.22:
                 has_vest = True
                 vest_conf = float(round(max_v, 2))
-            elif max_nv > max_v and max_nv >= 0.28:
-                # Normal shirt detected by neural model - STRICTLY NOT A VEST
+            elif max_nv > max_v and max_nv >= 0.22:
+                # Confirmed non-vest — strictly reject (avoid casual shirt false positives)
                 has_vest = False
                 vest_conf = float(round(max_nv, 2))
             else:
-                # Secondary strict optical verification (requires certified retroreflective tape)
+                # Secondary strict optical verification
                 sec_has_v, sec_v_conf = self.detector.evaluate_vest_presence(frame, pbox)
                 has_vest = sec_has_v
                 vest_conf = sec_v_conf if sec_has_v else max(max_v, max_nv, 0.10)
 
-            # 3. Footwear (Boots/Shoes) with Spatial Ground Anchoring
+            # --- 3. Footwear (Boots/Shoes) — Per-Person Crop Primary ---
             shoes_confs = []
             no_shoes_confs = []
-            for item in raw_ppe:
+            # Per-person crop detections are spatially accurate for boots
+            for item in per_person_ppe:
+                if "shoe" in item.label or "boot" in item.label:
+                    cx, cy = item.box.center
+                    if feet_region.contains_point(cx, cy) or feet_region.iou(item.box) > 0.03:
+                        if "no" not in item.label:
+                            shoes_confs.append(item.confidence)
+                        else:
+                            no_shoes_confs.append(item.confidence)
+
+            # Also check global detections as backup
+            for item in global_ppe:
                 if "shoe" in item.label or "boot" in item.label:
                     cx, cy = item.box.center
                     if feet_region.contains_point(cx, cy) or feet_region.iou(item.box) > 0.04:
@@ -147,10 +172,11 @@ class ComplianceEngine:
 
             has_boots = False
             boots_conf = 0.0
-            if max_s > max_ns and max_s >= 0.25:
+            # Lowered thresholds: 0.25 → 0.20, 0.28 → 0.22
+            if max_s > max_ns and max_s >= 0.20:
                 has_boots = True
                 boots_conf = float(round(max_s, 2))
-            elif max_ns > max_s and max_ns >= 0.28:
+            elif max_ns > max_s and max_ns >= 0.22:
                 has_boots = False
                 boots_conf = float(round(max_ns, 2))
             else:
@@ -159,10 +185,21 @@ class ComplianceEngine:
                 has_boots = opt_boots
                 boots_conf = opt_b_conf
 
-            # 4. Gloves Evaluation with Lateral Arm Anchoring
+            # --- 4. Gloves Evaluation — Per-Person Crop Primary ---
             glove_confs = []
             no_glove_confs = []
-            for item in raw_ppe:
+            # Per-person crop detections for gloves
+            for item in per_person_ppe:
+                if "glove" in item.label:
+                    cx, cy = item.box.center
+                    if hands_region.contains_point(cx, cy) or hands_region.iou(item.box) > 0.03:
+                        if "no" not in item.label:
+                            glove_confs.append(item.confidence)
+                        else:
+                            no_glove_confs.append(item.confidence)
+
+            # Also check global detections
+            for item in global_ppe:
                 if "glove" in item.label:
                     cx, cy = item.box.center
                     if hands_region.contains_point(cx, cy) or hands_region.iou(item.box) > 0.04:
@@ -176,10 +213,11 @@ class ComplianceEngine:
 
             has_gloves = False
             gloves_conf = 0.0
-            if max_g > max_ng and max_g >= 0.25:
+            # Lowered thresholds: 0.25 → 0.20, 0.28 → 0.22
+            if max_g > max_ng and max_g >= 0.20:
                 has_gloves = True
                 gloves_conf = float(round(max_g, 2))
-            elif max_ng > max_g and max_ng >= 0.28:
+            elif max_ng > max_g and max_ng >= 0.22:
                 has_gloves = False
                 gloves_conf = float(round(max_ng, 2))
             else:
@@ -188,7 +226,7 @@ class ComplianceEngine:
                 has_gloves = opt_gloves
                 gloves_conf = opt_g_conf
 
-            # 5. Evaluate Against Active Zone Policy
+            # --- 5. Evaluate Against Active Zone Policy ---
             missing_items = []
             active_items = []
 
