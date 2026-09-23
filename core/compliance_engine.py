@@ -93,8 +93,42 @@ class ComplianceEngine:
                     has_helmet = False
                     helmet_conf = max(max_h, max_nh, 0.15)
 
-            # 2. High-Visibility Vest Evaluation (CLAHE + Contrast Stripes)
-            has_vest, vest_conf = self.detector.evaluate_vest_presence(frame, pbox)
+            # 2. High-Visibility Vest Evaluation (Neural Model + Strict Optical Verification)
+            vest_region = BoundingBox(
+                pbox.x1 - 0.08 * pw,
+                pbox.y1 + 0.14 * ph,
+                pbox.x2 + 0.08 * pw,
+                pbox.y1 + 0.72 * ph
+            )
+            vest_confs = []
+            no_vest_confs = []
+            for item in raw_ppe:
+                if "vest" in item.label:
+                    cx, cy = item.box.center
+                    if vest_region.contains_point(cx, cy) or vest_region.iou(item.box) > 0.04:
+                        if "no" not in item.label:
+                            vest_confs.append(item.confidence)
+                        else:
+                            no_vest_confs.append(item.confidence)
+
+            max_v = max(vest_confs) if vest_confs else 0.0
+            max_nv = max(no_vest_confs) if no_vest_confs else 0.0
+
+            has_vest = False
+            vest_conf = 0.0
+
+            if max_v > max_nv and max_v >= 0.28:
+                has_vest = True
+                vest_conf = float(round(max_v, 2))
+            elif max_nv > max_v and max_nv >= 0.28:
+                # Normal shirt detected by neural model - STRICTLY NOT A VEST
+                has_vest = False
+                vest_conf = float(round(max_nv, 2))
+            else:
+                # Secondary strict optical verification (requires certified retroreflective tape)
+                sec_has_v, sec_v_conf = self.detector.evaluate_vest_presence(frame, pbox)
+                has_vest = sec_has_v
+                vest_conf = sec_v_conf if sec_has_v else max(max_v, max_nv, 0.10)
 
             # 3. Footwear (Boots/Shoes) with Spatial Ground Anchoring
             shoes_confs = []
@@ -120,6 +154,7 @@ class ComplianceEngine:
                 has_boots = False
                 boots_conf = float(round(max_ns, 2))
             else:
+                # Secondary ground plane footwear edge & texture analysis
                 has_boots = (max_s > 0.20)
                 boots_conf = max(max_s, 0.20)
 

@@ -35,15 +35,16 @@ class SafetyVisualizer:
         hazards: List[HazardDetection],
         zone: ZoneConfig,
         fps: float = 0.0,
+        latency_ms: float = 0.0,
         show_boxes: bool = True,
         show_badges: bool = True,
         show_hazards: bool = True,
         show_telemetry: bool = True,
-        show_confidence: bool = True
+        show_confidence: bool = False
     ) -> np.ndarray:
         """
         Draws the complete safety monitoring telemetry HUD onto the frame
-        with customizable layer toggles.
+        with customizable layer toggles and measured end-to-end latency.
         """
         vis_frame = frame.copy()
 
@@ -57,7 +58,7 @@ class SafetyVisualizer:
 
         # 3. Draw Top Information & Telemetry Banner
         if show_telemetry:
-            self._draw_top_telemetry(vis_frame, workers, hazards, zone, fps)
+            self._draw_top_telemetry(vis_frame, workers, hazards, zone, fps, latency_ms)
 
         # 4. If critical hazard exists, draw perimeter alert strobe
         if show_hazards and any(h.hazard_type in (HazardType.FIRE, HazardType.SMOKE) for h in hazards):
@@ -163,7 +164,8 @@ class SafetyVisualizer:
         workers: List[WorkerCompliance],
         hazards: List[HazardDetection],
         zone: ZoneConfig,
-        fps: float
+        fps: float,
+        latency_ms: float = 0.0
     ):
         h, w, _ = frame.shape
         bar_height = 54
@@ -183,7 +185,8 @@ class SafetyVisualizer:
         cv2.putText(frame, cam_text, (16, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
 
         time_str = time.strftime("%Y-%m-%d  %H:%M:%S")
-        cv2.putText(frame, f"REC [LIVE]  {time_str}  FPS: {fps:.1f}", (16, 44), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 180, 180), 1, cv2.LINE_AA)
+        rec_text = f"REC [LIVE]  {time_str}  |  FPS: {fps:.1f}  |  LATENCY: {latency_ms:.1f}ms"
+        cv2.putText(frame, rec_text, (16, 44), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 180, 180), 1, cv2.LINE_AA)
 
         # Right stats: Total Workers, Compliant, Violations
         total = len(workers)

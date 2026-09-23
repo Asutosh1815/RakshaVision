@@ -19,15 +19,33 @@ class SafetyGearDetector:
         base_model_path: str = "yolov8n.pt",
         ppe_model_path: str = "weights/yolov8n-ppe.pt",
         hardhat_model_path: str = "weights/yolov8n-hardhat.pt",
+        mendeley_model_path: str = "weights/yolov8n-mendeley-ppe.pt",
         device: str = "cpu"
     ):
         self.device = device
         
-        # Load standard YOLO for person detection
+        # 1. Load standard YOLO for person detection
         print(f"[Detector] Loading base YOLO model ({base_model_path})...")
         self.person_model = YOLO(base_model_path)
         
-        # Load PPE model if available
+        # 2. Load fine-tuned Mendeley PPE model (Helmet, NoHelmet, Vest, NoVest)
+        self.mendeley_model = None
+        # Check explicit path or run checkpoint
+        check_paths = [
+            mendeley_model_path,
+            "runs/mendeley_train/ppe_model/weights/best.pt",
+            "runs/mendeley_train/ppe_model/weights/last.pt"
+        ]
+        for p in check_paths:
+            if os.path.exists(p):
+                try:
+                    print(f"[Detector] Loading fine-tuned Mendeley PPE model ({p})...")
+                    self.mendeley_model = YOLO(p)
+                    break
+                except Exception as e:
+                    print(f"[Detector] Note: Could not load {p}: {e}")
+
+        # 3. Load General PPE Model for footwear and gloves
         self.ppe_model = None
         if os.path.exists(ppe_model_path):
             try:
@@ -36,7 +54,7 @@ class SafetyGearDetector:
             except Exception as e:
                 print(f"[Detector] Warning: Could not load PPE model: {e}")
                 
-        # Load Hardhat model if available
+        # 4. Load Hardhat model if available
         self.hardhat_model = None
         if os.path.exists(hardhat_model_path):
             try:
@@ -45,8 +63,14 @@ class SafetyGearDetector:
             except Exception as e:
                 print(f"[Detector] Warning: Could not load Hardhat model: {e}")
 
+        self.last_latency_ms: float = 0.0
+        self.last_ppe_latency_ms: float = 0.0
+
     def detect_persons(self, frame: np.ndarray, conf_threshold: float = 0.35) -> List[Detection]:
-        """Detect all human workers in the frame."""
+        """Detect all human workers in the frame with measured latency in milliseconds."""
+        import time
+        t_start = time.perf_counter()
+
         results = self.person_model(frame, classes=[0], conf=conf_threshold, verbose=False)
         detections: List[Detection] = []
         
@@ -62,35 +86,62 @@ class SafetyGearDetector:
                     box=BoundingBox(coords[0], coords[1], coords[2], coords[3]),
                     track_id=track_id
                 ))
+
+        self.last_latency_ms = (time.perf_counter() - t_start) * 1000.0
         return detections
 
     def detect_ppe_items(self, frame: np.ndarray, conf_threshold: float = 0.25) -> List[Detection]:
-        """Detect raw PPE equipment using YOLO PPE and Hardhat models."""
+        """
+        Detect raw PPE equipment using unified Mendeley model (Vest/NoVest, Helmet/NoHelmet)
+        and complementary footwear and glove detection.
+        """
+        import time
+        t_start = time.perf_counter()
         ppe_detections: List[Detection] = []
 
-        # 1. Hardhat Model (if available)
-        if self.hardhat_model is not None:
+        # 1. Primary Mendeley Model: Ground-truth trained on Vest vs NoVest, Helmet vs NoHelmet
+        if self.mendeley_model is not None:
             try:
-                h_results = self.hardhat_model(frame, conf=conf_threshold, verbose=False)
-                for r in h_results:
+                m_results = self.mendeley_model(frame, conf=conf_threshold, verbose=False)
+                for r in m_results:
                     for box in r.boxes:
                         coords = box.xyxy[0].cpu().numpy().tolist()
                         conf = float(box.conf[0].cpu().numpy())
                         cls_id = int(box.cls[0].cpu().numpy())
-                        raw_label = self.hardhat_model.names.get(cls_id, "").lower()
+                        raw_label = self.mendeley_model.names.get(cls_id, "").lower()
 
-                        if "hard" in raw_label or "helmet" in raw_label:
-                            is_violation = "no" in raw_label
+                        if "novest" in raw_label or "no_vest" in raw_label:
                             ppe_detections.append(Detection(
-                                label="helmet" if not is_violation else "no_helmet",
+                                label="no_vest",
                                 confidence=conf,
                                 box=BoundingBox(coords[0], coords[1], coords[2], coords[3]),
-                                sub_type="violation" if is_violation else "compliant"
+                                sub_type="violation"
+                            ))
+                        elif "vest" in raw_label:
+                            ppe_detections.append(Detection(
+                                label="vest",
+                                confidence=conf,
+                                box=BoundingBox(coords[0], coords[1], coords[2], coords[3]),
+                                sub_type="compliant"
+                            ))
+                        elif "nohelmet" in raw_label or "no_helmet" in raw_label:
+                            ppe_detections.append(Detection(
+                                label="no_helmet",
+                                confidence=conf,
+                                box=BoundingBox(coords[0], coords[1], coords[2], coords[3]),
+                                sub_type="violation"
+                            ))
+                        elif "helmet" in raw_label:
+                            ppe_detections.append(Detection(
+                                label="helmet",
+                                confidence=conf,
+                                box=BoundingBox(coords[0], coords[1], coords[2], coords[3]),
+                                sub_type="compliant"
                             ))
             except Exception as e:
                 pass
 
-        # 2. General PPE Model (if available)
+        # 2. General PPE Model: Footwear (Shoes / No-Shoes) and Gloves (Glove / No-Glove)
         if self.ppe_model is not None:
             try:
                 p_results = self.ppe_model(frame, conf=conf_threshold, verbose=False)
@@ -113,6 +164,29 @@ class SafetyGearDetector:
             except Exception as e:
                 pass
 
+        # 3. Hardhat Model (if Mendeley model not yet loaded)
+        if self.mendeley_model is None and self.hardhat_model is not None:
+            try:
+                h_results = self.hardhat_model(frame, conf=conf_threshold, verbose=False)
+                for r in h_results:
+                    for box in r.boxes:
+                        coords = box.xyxy[0].cpu().numpy().tolist()
+                        conf = float(box.conf[0].cpu().numpy())
+                        cls_id = int(box.cls[0].cpu().numpy())
+                        raw_label = self.hardhat_model.names.get(cls_id, "").lower()
+
+                        if "hard" in raw_label or "helmet" in raw_label:
+                            is_violation = "no" in raw_label
+                            ppe_detections.append(Detection(
+                                label="helmet" if not is_violation else "no_helmet",
+                                confidence=conf,
+                                box=BoundingBox(coords[0], coords[1], coords[2], coords[3]),
+                                sub_type="violation" if is_violation else "compliant"
+                            ))
+            except Exception as e:
+                pass
+
+        self.last_ppe_latency_ms = (time.perf_counter() - t_start) * 1000.0
         return ppe_detections
 
     def evaluate_vest_presence(
@@ -192,27 +266,28 @@ class SafetyGearDetector:
         gray_torso = cv2.cvtColor(torso_crop, cv2.COLOR_BGR2GRAY)
         sobel_y = cv2.Sobel(gray_torso, cv2.CV_64F, 0, 1, ksize=3)
         edge_energy = float(np.mean(np.abs(sobel_y)))
-        has_stripe_edges = edge_energy > 12.0
+        # Strict industrial retroreflective stripe check:
+        # High-visibility vests MUST have certified retroreflective tape with distinct horizontal boundary gradients
+        has_stripe_edges = edge_energy > 16.0
+        has_refl_tape = (refl_ratio >= 0.022 and has_stripe_edges)
 
-        # Scoring decision
+        # Scoring decision: Normal shirts (red, yellow, orange, polo, t-shirt) do NOT have reflective tape!
         has_vest = False
         confidence = 0.0
 
-        if vest_ratio >= 0.12 and (refl_ratio >= 0.02 or has_stripe_edges):
+        if vest_ratio >= 0.14 and has_refl_tape:
             has_vest = True
-            confidence = min(0.98, 0.65 + vest_ratio * 1.5 + refl_ratio * 2.0)
-        elif vest_ratio >= 0.16:
+            confidence = min(0.98, 0.65 + vest_ratio * 1.5 + refl_ratio * 3.0)
+        elif vest_ratio >= 0.22 and refl_ratio >= 0.035:
             has_vest = True
-            confidence = min(0.92, 0.55 + vest_ratio * 1.6)
-        elif vest_ratio >= 0.08 and refl_ratio >= 0.04 and has_stripe_edges:
+            confidence = min(0.92, 0.60 + vest_ratio * 1.2)
+        elif vest_ratio >= 0.09 and refl_ratio >= 0.045 and has_stripe_edges:
             has_vest = True
-            confidence = min(0.88, 0.50 + (vest_ratio + refl_ratio) * 1.8)
-        elif vest_ratio >= 0.05 and refl_ratio >= 0.06:
-            has_vest = True
-            confidence = 0.72
+            confidence = 0.82
         else:
+            # Normal shirts lacking reflective tape are strictly classified as non-vest
             has_vest = False
-            confidence = max(0.05, float(vest_ratio * 2.0))
+            confidence = max(0.05, float(vest_ratio * 0.8))
 
         return has_vest, float(round(confidence, 3))
 

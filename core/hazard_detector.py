@@ -22,6 +22,7 @@ class HazardDetector:
         self.min_smoke_area = min_smoke_area
         self.sensitivity = max(0.1, min(1.0, sensitivity))
         self.prev_gray: Optional[np.ndarray] = None
+        self.last_latency_ms: float = 0.0
 
     def detect_hazards(
         self,
@@ -29,10 +30,13 @@ class HazardDetector:
         worker_boxes: Optional[List[BoundingBox]] = None
     ) -> List[HazardDetection]:
         """
-        Processes a video frame and returns all detected fire and smoke hazards
-        with bounding boxes, confidence ratings, and severity levels.
+        Processes a video frame and returns all detected fire and smoke hazards.
+        Measured execution latency is available in self.last_latency_ms.
         worker_boxes: If provided, worker regions are isolated to prevent orange vests from false fire triggering.
         """
+        import time
+        t_start = time.perf_counter()
+
         hazards: List[HazardDetection] = []
         h, w, _ = frame.shape
         total_frame_area = float(h * w)
@@ -41,10 +45,11 @@ class HazardDetector:
         fire_detections = self._detect_flames(frame, total_frame_area, worker_boxes=worker_boxes)
         hazards.extend(fire_detections)
 
-        # 2. Smoke Detection Pipeline
+        # 2. Smoke Detection Pipeline (with Steam and Dust rejection)
         smoke_detections = self._detect_smoke(frame, total_frame_area, worker_boxes=worker_boxes)
         hazards.extend(smoke_detections)
 
+        self.last_latency_ms = (time.perf_counter() - t_start) * 1000.0
         return hazards
 
     def _detect_flames(
@@ -215,6 +220,17 @@ class HazardDetector:
                 # Rejects cluttered pipes/machinery (std > 50) and flat walls (std < 12)
                 gray_roi = gray[y_box:y_box + bh, x:x + bw]
                 std_val = float(np.std(gray_roi))
+
+                # Steam & Airborne Dust Rejection:
+                # 1. Industrial steam is intensely bright/pure white specular (mean V > 238, mean S < 14)
+                # 2. Atmospheric dust produces high-frequency spatial grain without cohesive plume core (std > 47.0)
+                v_roi = v[y_box:y_box + bh, x:x + bw]
+                mean_v = float(np.mean(v_roi))
+                s_roi = s[y_box:y_box + bh, x:x + bw]
+                mean_s = float(np.mean(s_roi))
+
+                if (mean_v > 238.0 and mean_s < 14.0) or (std_val > 47.0):
+                    continue
 
                 if density > 0.28 and (14.0 <= std_val <= 46.0):
                     conf = min(0.95, 0.62 + (area / 15000.0) * 0.2 + (density * 0.15))
