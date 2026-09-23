@@ -109,7 +109,29 @@ Validation results from the included stress-test benchmark ([`tests/benchmark_ha
 
 ---
 
-## 📂 Repository Structure
+## 📂 Repository Structure & File Descriptions
+
+| Directory / File | Description & Purpose |
+| :--- | :--- |
+| `core/` | **Core AI Engine**: Multi-model YOLOv8 detectors, 4-point PPE compliance engine, anatomical spatial anchoring, and optical fire/smoke hazard logic. |
+| `app.py` | **Command Center Dashboard**: Streamlit real-time monitoring interface with 5 interactive tabs, live HUD stream, manual siren controls, and SOP dispatch. |
+| `android/` | **Mobile Command Client**: Android Studio project structure and webview configuration for field supervisors and APK generation. |
+| `benchmark_assets/` | **Validation Test Assets**: Standardized test patterns, normal colored shirts, and industrial steam images for false-positive stress testing. |
+| `dataset/` | **Industrial Training Corpora**: Mendeley 2,286-image industrial PPE dataset formatted in YOLO annotation standard. |
+| `demo_assets/` | **Demonstration Media**: Pre-bundled industrial scenario clips and sample CCTV streams for testing without live cameras. |
+| `docs/` | **Documentation & Reports**: In-depth technical guides, architecture blueprints, model performance benchmarks, and SOP emergency protocols. |
+| `snapshots/` | **Compliance Audit Trail**: Automated timestamped incident captures, violation snapshots, and OSHA/ISO audit evidence. |
+| `tests/` | **Verification Suite**: End-to-end integration test suite (`test_pipeline.py`) and harsh-condition stress benchmark (`benchmark_harsh_conditions.py`). |
+| `utils/` | **Helper Utilities**: Video stream ingestion, multi-threaded audio siren HAL, and asynchronous webhook dispatching. |
+| `weights/` | **Neural Model Weights**: Checkpoints for base person detector, Mendeley PPE model, dedicated hardhat detector, and PPE classifiers. |
+| `www/` | **Web Frontend Assets**: Static web assets, responsive dashboard layouts, and mobile-friendly webview templates. |
+| `train_mendeley_ppe.py` | **Model Training Pipeline**: Fine-tuning pipeline for YOLOv8 on Mendeley 2,286 PPE dataset with automatic metric tracking. |
+| `copy_trained_weights.py` | **Model Deployment Script**: Automates copying best trained weights to production `weights/` directory upon training completion. |
+| `requirements.txt` | **Dependencies**: Pinned Python package specifications for edge inference, PyTorch, Ultralytics, and Streamlit. |
+| `run.py` / `run.bat` | **One-Click Launchers**: Standalone launcher scripts for single-click execution of RakshaVision on Windows and Linux. |
+| `safety_audit_log.csv` | **Audit Log**: Persistent structured record of detected worker compliance statuses and hazard alerts. |
+| `LICENSE` | **License**: MIT open-source license terms. |
+| `.gitignore` | **Git Configuration**: Pre-configured rules ignoring caches, local training runs, and bulky checkpoints. |
 
 ```
 RakshaVision/
