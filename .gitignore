@@ -14,6 +14,7 @@ ENV/
 # Temporary generated test snapshots and logs
 snapshots/*
 !snapshots/.gitkeep
+!snapshots/README.md
 snapshots_test/
 *.csv
 
