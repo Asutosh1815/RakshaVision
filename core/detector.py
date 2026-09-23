@@ -342,3 +342,126 @@ class SafetyGearDetector:
         if hat_ratio >= 0.22:
             return True, float(round(min(0.92, 0.50 + hat_ratio * 1.5), 2))
         return False, 0.0
+
+    def evaluate_footwear_presence(
+        self,
+        frame: np.ndarray,
+        person_box: BoundingBox
+    ) -> Tuple[bool, float]:
+        """
+        Evaluates presence of protective safety footwear / steel-toe boots
+        in the lower anatomical ground-plane region (bottom 22% of worker bounding box).
+        Differentiates heavy protective boot leather/sole profile from bare feet/sandals.
+        """
+        h, w, _ = frame.shape
+        x1 = max(0, int(person_box.x1))
+        y1 = max(0, int(person_box.y1))
+        x2 = min(w, int(person_box.x2))
+        y2 = min(h, int(person_box.y2))
+
+        pw = x2 - x1
+        ph = y2 - y1
+        if pw < 10 or ph < 20:
+            return False, 0.0
+
+        fy1 = max(0, y1 + int(0.78 * ph))
+        fy2 = min(h, y2 + int(0.04 * ph))
+        fx1 = max(0, x1 - int(0.06 * pw))
+        fx2 = min(w, x2 + int(0.06 * pw))
+
+        if fx2 <= fx1 or fy2 <= fy1:
+            return False, 0.0
+
+        feet_crop = frame[fy1:fy2, fx1:fx2]
+        if feet_crop.size == 0:
+            return False, 0.0
+
+        total_pixels = feet_crop.shape[0] * feet_crop.shape[1]
+
+        # 1. Bare skin detection in YCrCb (detects bare feet or open sandals)
+        ycrcb = cv2.cvtColor(feet_crop, cv2.COLOR_BGR2YCrCb)
+        mask_skin = cv2.inRange(ycrcb, np.array([0, 133, 77], dtype=np.uint8), np.array([255, 173, 127], dtype=np.uint8))
+        skin_ratio = cv2.countNonZero(mask_skin) / float(total_pixels)
+
+        # 2. Dark heavy boot leather / rubber sole profile
+        hsv = cv2.cvtColor(feet_crop, cv2.COLOR_BGR2HSV)
+        mask_dark = cv2.inRange(hsv, np.array([0, 0, 0], dtype=np.uint8), np.array([180, 255, 95], dtype=np.uint8))
+        dark_ratio = cv2.countNonZero(mask_dark) / float(total_pixels)
+
+        # 3. High-density sole texture and edges (Sobel gradient)
+        gray_feet = cv2.cvtColor(feet_crop, cv2.COLOR_BGR2GRAY)
+        sobel = cv2.Sobel(gray_feet, cv2.CV_64F, 1, 1, ksize=3)
+        edge_energy = float(np.mean(np.abs(sobel)))
+
+        if skin_ratio > 0.18:
+            return False, float(round(skin_ratio, 2))
+
+        has_boots = (dark_ratio >= 0.22 or (dark_ratio >= 0.12 and edge_energy > 12.0))
+        confidence = min(0.92, 0.50 + dark_ratio * 0.8 + min(0.3, edge_energy / 50.0)) if has_boots else 0.20
+        return has_boots, float(round(confidence, 2))
+
+    def evaluate_gloves_presence(
+        self,
+        frame: np.ndarray,
+        person_box: BoundingBox
+    ) -> Tuple[bool, float]:
+        """
+        Evaluates presence of industrial safety hand gloves in the lateral hand regions.
+        Differentiates high-contrast glove materials (nitrile blue, neon yellow, heavy leather)
+        from bare skin tones.
+        """
+        h, w, _ = frame.shape
+        x1 = max(0, int(person_box.x1))
+        y1 = max(0, int(person_box.y1))
+        x2 = min(w, int(person_box.x2))
+        y2 = min(h, int(person_box.y2))
+
+        pw = x2 - x1
+        ph = y2 - y1
+        if pw < 10 or ph < 20:
+            return False, 0.0
+
+        hy1 = max(0, y1 + int(0.35 * ph))
+        hy2 = min(h, y1 + int(0.82 * ph))
+        left_x1 = max(0, x1 - int(0.18 * pw))
+        left_x2 = min(w, x1 + int(0.28 * pw))
+        right_x1 = max(0, x2 - int(0.28 * pw))
+        right_x2 = min(w, x2 + int(0.18 * pw))
+
+        hand_crops = []
+        if left_x2 > left_x1 and hy2 > hy1:
+            lc = frame[hy1:hy2, left_x1:left_x2]
+            if lc.size > 0:
+                hand_crops.append(lc)
+        if right_x2 > right_x1 and hy2 > hy1:
+            rc = frame[hy1:hy2, right_x1:right_x2]
+            if rc.size > 0:
+                hand_crops.append(rc)
+
+        if not hand_crops:
+            return False, 0.0
+
+        skin_ratios = []
+        glove_ratios = []
+
+        for crop in hand_crops:
+            tot = crop.shape[0] * crop.shape[1]
+            ycrcb = cv2.cvtColor(crop, cv2.COLOR_BGR2YCrCb)
+            mask_skin = cv2.inRange(ycrcb, np.array([0, 133, 77], dtype=np.uint8), np.array([255, 173, 127], dtype=np.uint8))
+            skin_ratios.append(cv2.countNonZero(mask_skin) / float(tot))
+
+            hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+            mask_blue = cv2.inRange(hsv, np.array([95, 60, 60], dtype=np.uint8), np.array([130, 255, 255], dtype=np.uint8))
+            mask_hivis = cv2.inRange(hsv, np.array([25, 70, 70], dtype=np.uint8), np.array([42, 255, 255], dtype=np.uint8))
+            mask_glove = cv2.bitwise_or(mask_blue, mask_hivis)
+            glove_ratios.append(cv2.countNonZero(mask_glove) / float(tot))
+
+        mean_skin = float(np.mean(skin_ratios)) if skin_ratios else 0.0
+        mean_glove = float(np.mean(glove_ratios)) if glove_ratios else 0.0
+
+        if mean_skin > 0.16:
+            return False, float(round(mean_skin, 2))
+
+        has_gloves = (mean_glove >= 0.04 or (mean_skin < 0.05 and mean_glove >= 0.01))
+        conf = min(0.90, 0.55 + mean_glove * 2.0) if has_gloves else 0.25
+        return has_gloves, float(round(conf, 2))

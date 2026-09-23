@@ -112,17 +112,14 @@ class SafetyVisualizer:
                 cv2.putText(frame, header_str, (x1 + 6, badge_y2 - 5), font, font_scale, (0, 0, 0), 2, cv2.LINE_AA)
                 cv2.putText(frame, header_str, (x1 + 6, badge_y2 - 5), font, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
 
-                # Detailed PPE checklist tag underneath
+                # Detailed 4-Point PPE checklist tag underneath
                 tag_y = y1 + 18
-                gear_items = []
-                if zone.require_helmet:
-                    gear_items.append(("Helmet", worker.has_helmet, worker.helmet_conf))
-                if zone.require_vest:
-                    gear_items.append(("Vest", worker.has_vest, worker.vest_conf))
-                if zone.require_boots:
-                    gear_items.append(("Boots", worker.has_boots, worker.boots_conf))
-                if zone.require_gloves:
-                    gear_items.append(("Gloves", worker.has_gloves, worker.gloves_conf))
+                gear_items = [
+                    ("Helmet", worker.has_helmet, worker.helmet_conf),
+                    ("Vest", worker.has_vest, worker.vest_conf),
+                    ("Boots", worker.has_boots, worker.boots_conf),
+                    ("Gloves", worker.has_gloves, worker.gloves_conf)
+                ]
 
                 for gear_name, present, conf in gear_items:
                     indicator = "[+]" if present else "[X]"

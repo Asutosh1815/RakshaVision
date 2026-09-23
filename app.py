@@ -233,6 +233,7 @@ with st.sidebar:
     policy_preset = st.selectbox(
         "Choose Compliance Template",
         [
+            "🛡️ Full 4-Point PPE Mandate (Helmet + Vest + Boots + Gloves)",
             "⚡ Standard Construction (Helmet + Vest)",
             "⚙️ Heavy Fabrication (Helmet + Vest + Boots)",
             "🔥 Hot Work & Welding (Fire Alert + Helmet + Vest + Gloves)",
@@ -243,7 +244,9 @@ with st.sidebar:
     )
 
     # Preset logic
-    if policy_preset == "⚡ Standard Construction (Helmet + Vest)":
+    if policy_preset == "🛡️ Full 4-Point PPE Mandate (Helmet + Vest + Boots + Gloves)":
+        preset_h, preset_v, preset_b, preset_g, preset_haz = True, True, True, True, True
+    elif policy_preset == "⚡ Standard Construction (Helmet + Vest)":
         preset_h, preset_v, preset_b, preset_g, preset_haz = True, True, False, False, True
     elif policy_preset == "⚙️ Heavy Fabrication (Helmet + Vest + Boots)":
         preset_h, preset_v, preset_b, preset_g, preset_haz = True, True, True, False, True
@@ -252,7 +255,7 @@ with st.sidebar:
     elif policy_preset == "📦 Logistics Yard (High-Vis Vest Only)":
         preset_h, preset_v, preset_b, preset_g, preset_haz = False, True, False, False, True
     else:
-        preset_h, preset_v, preset_b, preset_g, preset_haz = True, True, False, False, True
+        preset_h, preset_v, preset_b, preset_g, preset_haz = True, True, True, True, True
 
     st.markdown("---")
     st.subheader("📍 Active Camera / Zone")

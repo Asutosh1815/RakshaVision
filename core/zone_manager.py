@@ -18,7 +18,7 @@ class ZoneManager:
                 require_helmet=True,
                 require_vest=True,
                 require_boots=True,
-                require_gloves=False,
+                require_gloves=True,
                 hazard_monitoring=True,
                 sensitivity=0.45
             ),
@@ -41,8 +41,8 @@ class ZoneManager:
                 location_desc="South Yard - Active Forklift Traffic & High Pallet Racks",
                 require_helmet=True,
                 require_vest=True,
-                require_boots=False,
-                require_gloves=False,
+                require_boots=True,
+                require_gloves=True,
                 hazard_monitoring=True,
                 sensitivity=0.40
             ),
@@ -53,8 +53,8 @@ class ZoneManager:
                 location_desc="Administrative Core - Safety Transition Checkpoint",
                 require_helmet=True,
                 require_vest=False,
-                require_boots=False,
-                require_gloves=False,
+                require_boots=True,
+                require_gloves=True,
                 hazard_monitoring=False,
                 sensitivity=0.30
             )

@@ -154,9 +154,10 @@ class ComplianceEngine:
                 has_boots = False
                 boots_conf = float(round(max_ns, 2))
             else:
-                # Secondary ground plane footwear edge & texture analysis
-                has_boots = (max_s > 0.20)
-                boots_conf = max(max_s, 0.20)
+                # Secondary optical ground-plane inspection
+                opt_boots, opt_b_conf = self.detector.evaluate_footwear_presence(frame, pbox)
+                has_boots = opt_boots
+                boots_conf = opt_b_conf
 
             # 4. Gloves Evaluation with Lateral Arm Anchoring
             glove_confs = []
@@ -182,8 +183,10 @@ class ComplianceEngine:
                 has_gloves = False
                 gloves_conf = float(round(max_ng, 2))
             else:
-                has_gloves = (max_g > 0.20)
-                gloves_conf = max(max_g, 0.20)
+                # Secondary optical hand-region skin vs. glove fabric analysis
+                opt_gloves, opt_g_conf = self.detector.evaluate_gloves_presence(frame, pbox)
+                has_gloves = opt_gloves
+                gloves_conf = opt_g_conf
 
             # 5. Evaluate Against Active Zone Policy
             missing_items = []
