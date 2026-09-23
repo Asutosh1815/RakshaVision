@@ -229,8 +229,8 @@ class SafetyGearDetector:
                         cls_id = int(box.cls[0].cpu().numpy())
                         label = self.ppe_model.names.get(cls_id, "").lower()
 
-                        # Only use shoe and glove classes from this model
-                        if "shoe" not in label and "glove" not in label:
+                        # Only use shoe/boot and glove classes from this model
+                        if "shoe" not in label and "boot" not in label and "footwear" not in label and "glove" not in label:
                             continue
 
                         # Translate coordinates back to full frame
@@ -385,10 +385,13 @@ class SafetyGearDetector:
             has_vest = True
             confidence = 0.82
         elif vest_ratio >= 0.30:
-            # Very high fluorescent coverage even without confirmed tape
-            # (tape may be occluded by tools/arms but vest fabric clearly visible)
-            has_vest = True
-            confidence = min(0.80, 0.55 + vest_ratio * 0.8)
+            # Very high fluorescent coverage still requires some reflective evidence
+            if refl_ratio >= 0.02:
+                has_vest = True
+                confidence = min(0.80, 0.55 + vest_ratio * 0.8)
+            else:
+                has_vest = False
+                confidence = max(0.05, float(vest_ratio * 0.6))
         else:
             # Normal shirts lacking reflective tape → strictly non-vest
             has_vest = False
@@ -503,9 +506,9 @@ class SafetyGearDetector:
         if skin_ratio > 0.18:
             return False, float(round(skin_ratio, 2))
 
-        # Raised threshold (0.28 vs old 0.22) to reduce dark-trouser false positives
-        has_boots = (dark_ratio >= 0.28 or (dark_ratio >= 0.14 and edge_energy > 14.0))
-        confidence = min(0.92, 0.50 + dark_ratio * 0.8 + min(0.3, edge_energy / 50.0)) if has_boots else 0.20
+        # Calibrated footwear threshold: detects leather/rubber boots while rejecting open skin
+        has_boots = (dark_ratio >= 0.22 or (dark_ratio >= 0.12 and edge_energy > 12.0))
+        confidence = min(0.92, 0.50 + dark_ratio * 0.7 + min(0.2, edge_energy / 50.0)) if has_boots else 0.20
         return has_boots, float(round(confidence, 2))
 
     def evaluate_gloves_presence(
